@@ -1,3 +1,5 @@
+import { lazy, Suspense } from 'react'
+import { Loader2 } from 'lucide-react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { Toaster as RadixToaster } from './components/ui/toaster'
@@ -12,6 +14,8 @@ import ProtectedRoute from './components/ProtectedRoute'
 import Mentors from './pages/Mentors'
 import MentorProfile from './pages/MentorProfile'
 import { AuthProvider } from './context/AuthContext'
+
+const AtsChecker = lazy(() => import('./pages/AtsChecker'))
 import { env } from './lib/env'
 import { useMockPay } from './lib/bookingService'
 
@@ -47,6 +51,14 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
+        <Route
+          path="/ats-checker"
+          element={
+            <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" aria-label="Loading" /></div>}>
+              <AtsChecker />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<NotFound />} />
       </Routes>
       </AuthProvider>
