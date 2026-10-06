@@ -15,7 +15,7 @@ import { formatIst } from '../lib/dashboardLogic'
 import {
   createMentor, deleteMentor, fetchBookings, fetchLeads, fetchMentors, isFkViolation, setSessionStatus, updateMentor,
 } from '../lib/adminApi'
-import { filterBookings, filterLeads, validateMentor, type BookingRow, type Lead, type Mentor, type MentorInput, type Status } from '../lib/adminLogic'
+import { filterBookings, filterLeads, safeMailto, safeTel, validateMentor, type BookingRow, type Lead, type Mentor, type MentorInput, type Status } from '../lib/adminLogic'
 import { toCsv } from '../lib/csv'
 
 const TABS = ['Bookings', 'Leads', 'Mentors'] as const
@@ -201,6 +201,7 @@ function BookingsTab() {
   )
 }
 
+// Note: cells starting with = + - @ get a leading apostrophe on purpose (formula-injection guard), so +91 phones export as '+91...
 function downloadCsv(leads: Lead[]) {
   const csv = toCsv(leads, [
     { key: 'name', header: 'Name' }, { key: 'email', header: 'Email' }, { key: 'phone', header: 'Phone' },
@@ -211,7 +212,7 @@ function downloadCsv(leads: Lead[]) {
   document.body.appendChild(a)
   a.click()
   a.remove()
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 function LeadsTab() {
@@ -233,8 +234,8 @@ function LeadsTab() {
             {shown.map((l) => (
               <tr key={l.id}>
                 <Td>{l.name}</Td>
-                <Td><a href={`mailto:${l.email}`} className="text-accent hover:underline break-all">{l.email}</a></Td>
-                <Td><a href={`tel:${l.phone.replace(/[^\d+]/g, '')}`} className="text-accent hover:underline whitespace-nowrap">{l.phone}</a></Td>
+                <Td>{safeMailto(l.email) ? <a href={safeMailto(l.email)!} className="text-accent hover:underline break-all">{l.email}</a> : <span className="break-all">{l.email}</span>}</Td>
+                <Td>{safeTel(l.phone) ? <a href={safeTel(l.phone)!} className="text-accent hover:underline whitespace-nowrap">{l.phone}</a> : <span className="whitespace-nowrap">{l.phone}</span>}</Td>
                 <Td><Expandable text={l.goals} /></Td>
                 <Td className="whitespace-nowrap">{formatIst(l.created_at)}</Td>
               </tr>
@@ -293,6 +294,7 @@ function MentorForm({ editing, onClose, setRows }: { editing: Mentor | null; onC
   return (
     <form onSubmit={submit} noValidate className="space-y-3">
       {field('name', 'Name', <Input {...props('name')} maxLength={100} />)}
+      {editing && <p className="text-xs text-muted-foreground -mt-2">Name is used to match the booking modal's mentors; renaming breaks that link.</p>}
       <div className="grid gap-3 sm:grid-cols-2">
         {field('title', 'Title', <Input {...props('title')} maxLength={100} />)}
         {field('company', 'Company', <Input {...props('company')} maxLength={100} />)}
@@ -414,7 +416,7 @@ export default function Admin() {
                   role="tab"
                   type="button"
                   aria-selected={tab === t}
-                  aria-controls={`panel-${t}`}
+                  aria-controls="admin-panel"
                   tabIndex={tab === t ? 0 : -1}
                   onClick={() => setTab(t)}
                   className={cn('px-4 py-2 text-sm font-semibold -mb-px border-b-2', tab === t ? 'border-accent text-accent' : 'border-transparent text-muted-foreground hover:text-foreground')}
@@ -423,7 +425,7 @@ export default function Admin() {
                 </button>
               ))}
             </div>
-            <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0}>
+            <div role="tabpanel" id="admin-panel" aria-labelledby={`tab-${tab}`} tabIndex={0}>
               {tab === 'Bookings' ? <BookingsTab /> : tab === 'Leads' ? <LeadsTab /> : <MentorsTab />}
             </div>
           </section>

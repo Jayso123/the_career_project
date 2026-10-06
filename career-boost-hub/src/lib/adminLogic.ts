@@ -9,7 +9,7 @@ export type BookingRow = {
   status: Status
   mentor: { name: string } | null
   student: { full_name: string } | null
-  payment: { reference: string; mode: string } | null
+  payment: { reference: string; mode: string; status?: string } | null
 }
 export type Lead = { id: string; name: string; email: string; phone: string; goals: string; created_at: string }
 export type Mentor = {
@@ -36,7 +36,9 @@ const mentorSchema = z.object({
   company: z.string().trim().max(100, 'Max 100 characters'),
   bio: z.string().trim().max(1000, 'Max 1000 characters'),
   skills: z.string().transform((s) => s.split(',').map((x) => x.trim()).filter(Boolean)),
-  rate_inr: z.string().trim().regex(/^\d+$/, 'Enter a whole number, 0 or more').transform(Number),
+  rate_inr: z.string().trim().regex(/^\d+$/, 'Enter a whole number, 0 or more')
+    .transform(Number)
+    .refine((n) => n <= 1_000_000, 'Too large'),
   photo_url: z
     .string()
     .trim()
@@ -59,4 +61,15 @@ export function validateMentor(input: MentorInput): { ok: true; value: MentorVal
   const errors: Record<string, string> = {}
   for (const i of r.error.issues) errors[String(i.path[0])] ??= i.message
   return { ok: false, errors }
+}
+
+const EMAIL_RE = /^[^\s@?&#%]+@[^\s@?&#%]+\.[^\s@?&#%]+$/
+/** Leads are anonymous input: link only plain addresses, so ?cc=/&bcc=/%0d%0a can't smuggle mail headers. */
+export function safeMailto(email: string): string | null {
+  const e = (email ?? '').trim()
+  return EMAIL_RE.test(e) ? `mailto:${encodeURIComponent(e).replace('%40', '@')}` : null
+}
+export function safeTel(phone: string): string | null {
+  const p = (phone ?? '').trim()
+  return /^\+?[0-9][0-9\s\-()]{5,19}$/.test(p) ? `tel:${p.replace(/[\s\-()]/g, '')}` : null
 }

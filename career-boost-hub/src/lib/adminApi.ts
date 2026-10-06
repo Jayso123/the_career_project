@@ -5,17 +5,19 @@ import type { BookingRow, Lead, Mentor, MentorValue, Status } from './adminLogic
 type Db = Pick<SupabaseClient, 'from'>
 type Err = unknown | null
 const one = <T>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? v[0] : v) ?? null
+type Pay = { status?: string }
+const pickPayment = (p: unknown) => (Array.isArray(p) ? ((p as Pay[]).find((x) => x.status === 'paid') ?? p[0]) : p) ?? null
 const MENTOR_COLS = 'id, name, title, company, bio, skills, rate_inr, photo_url'
 
 export async function fetchBookings(db: Db) {
   const r = await safe<Record<string, unknown>[]>(() =>
     db
       .from('sessions')
-      .select('id, starts_at, plan, requirements, status, mentors(name), profiles(full_name), payments(reference, mode)')
+      .select('id, starts_at, plan, requirements, status, mentors(name), profiles(full_name), payments(reference, mode, status)')
       .order('starts_at', { ascending: false }) as never,
   )
   const data =
-    r.data?.map(({ mentors, profiles, payments, ...s }) => ({ ...s, mentor: one(mentors), student: one(profiles), payment: one(payments) }) as BookingRow) ?? null
+    r.data?.map(({ mentors, profiles, payments, ...s }) => ({ ...s, mentor: one(mentors), student: one(profiles), payment: pickPayment(payments) }) as BookingRow) ?? null
   return { data, error: r.error }
 }
 
@@ -24,8 +26,11 @@ export const fetchLeads = (db: Db) =>
 
 export const fetchMentors = (db: Db) => safe<Mentor[]>(() => db.from('mentors').select(MENTOR_COLS).order('name') as never)
 
-export const setSessionStatus = async (db: Db, id: string, status: Status): Promise<Err> =>
-  (await safe(() => db.from('sessions').update({ status }).eq('id', id) as never)).error
+/** A zero-row update (RLS-filtered or deleted row) is an error, not success. */
+export async function setSessionStatus(db: Db, id: string, status: Status): Promise<Err> {
+  const r = await safe<{ id: string }[]>(() => db.from('sessions').update({ status }).eq('id', id).select('id') as never)
+  return r.error ?? (r.data?.length ? null : new Error('Booking not found or not allowed'))
+}
 
 export const createMentor = (db: Db, v: MentorValue) => safe<Mentor>(() => db.from('mentors').insert(v).select(MENTOR_COLS).single() as never)
 
