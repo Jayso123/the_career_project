@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ChevronDown, Download, Loader2, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import Navbar from '../components/clone/Navbar'
 import ResumePreview from '../components/ResumePreview'
@@ -8,8 +8,8 @@ import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import { toast } from '../components/ui/use-toast'
 import { useAuth } from '../context/AuthContext'
-import { LIMITS, emptyResume, newId, type ResumeData } from '../lib/resumeModel'
-import { adoptAnon, createSaver, loadLocal, loadRemote, pickResume, removeLocal, saveLocal, type SaveStatus } from '../lib/resumeStorage'
+import { LIMITS, newId, type ResumeData } from '../lib/resumeModel'
+import { useResumeSync } from '../lib/useResumeSync'
 import { supabase } from '../lib/supabase'
 import { cn } from '../lib/utils'
 import '../styles/print.css'
@@ -50,96 +50,17 @@ const RowCard = ({ children, onRemove, label }: { children: React.ReactNode; onR
 )
 
 export default function ResumeBuilder() {
-  const { user, loading: authLoading } = useAuth()
+  const { user, loading: authLoading, onBeforeSignOut } = useAuth()
   const uid = user?.id ?? null
-  const [data, setData] = useState<ResumeData>(emptyResume)
-  const [status, setStatus] = useState<SaveStatus>('idle')
-  const [sync, setSync] = useState<'loading' | 'ready' | 'failed'>('loading')
-  const [attempt, setAttempt] = useState(0)
+  const { data, set, reset, status, sync, retry, rev } = useResumeSync({
+    uid, authLoading, db: supabase, onBeforeSignOut,
+    onFailure: () => toast({ title: "Couldn't save your resume to your account", description: 'Your changes are kept in this browser.', variant: 'destructive' }),
+  })
   const [open, setOpen] = useState<Set<string>>(new Set(['personal']))
-  const [rev, setRev] = useState(0) // remounts the uncontrolled skills input after reset / load
   const [confirm, setConfirm] = useState(false)
-  const saver = useRef<ReturnType<typeof createSaver> | null>(null)
-  const owner = useRef<string | null | undefined>(undefined) // whose data is in state; undefined until auth settles
-  const quiet = useRef<ResumeData | null>(null) // a programmatic load: don't persist or re-upload it
-  const pending = useRef<{ uid: string | null; data: ResumeData; at: string } | null>(null)
-  const localTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-  const flushLocal = () => {
-    clearTimeout(localTimer.current)
-    if (pending.current) saveLocal(pending.current.uid, pending.current.data, pending.current.at)
-    pending.current = null
-  }
-  const load = (d: ResumeData) => { quiet.current = d; setData(d); setRev((r) => r + 1) }
-
-  // Owner switch + initial load. Cleanup flushes (never cancels) the previous owner's pending writes.
-  useEffect(() => {
-    if (authLoading) return
-    const prev = owner.current
-    if (typeof prev === 'string' && uid === null) removeLocal(prev) // explicit sign-out: shared-browser privacy, the DB keeps it
-    owner.current = uid
-    setStatus('idle')
-    const local = loadLocal(uid)
-    if (!uid || !supabase) {
-      load(local?.data ?? emptyResume())
-      setSync('ready')
-      return
-    }
-    load(local?.data ?? emptyResume())
-    setSync('loading')
-    let live = true
-    const db = supabase
-    void loadRemote(db, uid).then((remote) => {
-      if (!live) return
-      if (remote === undefined) { setSync('failed'); return } // keep the local draft; auto-save stays off so the DB row can't be overwritten
-      let pick = pickResume(loadLocal(uid), remote)
-      if (!pick && !remote) {
-        const anon = adoptAnon(uid)
-        if (anon) pick = { ...anon, source: 'local' }
-      }
-      if (pick) {
-        load(pick.data)
-        if (pick.source === 'remote') saveLocal(uid, pick.data, pick.updatedAt)
-      }
-      saver.current = createSaver(db, uid, {
-        onStatus: (s) => live && setStatus(s),
-        onFailure: () => toast({ title: "Couldn't save your resume to your account", description: 'Your changes are kept in this browser.', variant: 'destructive' }),
-      })
-      if (pick?.source === 'local') saver.current.save(pick.data)
-      setSync('ready')
-    })
-    return () => {
-      live = false
-      flushLocal()
-      void saver.current?.flush()
-      saver.current = null
-    }
-  }, [uid, authLoading, attempt])
-
-  // Edits: debounced local copy (200 ms) + debounced DB upsert.
-  useEffect(() => {
-    if (data === quiet.current) { quiet.current = null; return }
-    if (owner.current === undefined) return
-    pending.current = { uid: owner.current, data, at: new Date().toISOString() }
-    clearTimeout(localTimer.current)
-    localTimer.current = setTimeout(flushLocal, 200)
-    saver.current?.save(data)
-  }, [data])
-
-  useEffect(() => {
-    const hide = () => { flushLocal(); void saver.current?.flush() }
-    const vis = () => document.visibilityState === 'hidden' && hide()
-    window.addEventListener('pagehide', hide)
-    document.addEventListener('visibilitychange', vis)
-    return () => {
-      window.removeEventListener('pagehide', hide)
-      document.removeEventListener('visibilitychange', vis)
-    }
-  }, [])
 
   const focusSoon = (id: string) => setTimeout(() => document.getElementById(id)?.focus(), 0)
 
-  const set = (f: (d: ResumeData) => ResumeData) => setData(f)
   const toggle = (k: string) => setOpen((s) => { const n = new Set(s); if (!n.delete(k)) n.add(k); return n })
   const upExp = (id: string, f: (e: Exp) => Exp) => set((d) => ({ ...d, experience: d.experience.map((e) => (e.id === id ? f(e) : e)) }))
   const upList = <K extends 'education' | 'projects'>(k: K, id: string, patch: Partial<ResumeData[K][number]>) =>
@@ -178,7 +99,7 @@ export default function ResumeBuilder() {
             <Button type="button" variant="outline" disabled={sync === 'loading'} onClick={() => setConfirm(true)}><RotateCcw aria-hidden />Start over</Button>
             <p role="status" aria-live="polite" className={cn('ml-auto flex items-center gap-2 text-sm', status === 'error' || sync === 'failed' ? 'text-destructive font-medium' : 'text-muted-foreground')}>
               {statusText}
-              {sync === 'failed' && <Button type="button" size="sm" variant="outline" onClick={() => setAttempt((n) => n + 1)}>Retry</Button>}
+              {sync === 'failed' && <Button type="button" size="sm" variant="outline" onClick={retry}>Retry</Button>}
             </p>
           </div>
         </div>
@@ -275,7 +196,7 @@ export default function ResumeBuilder() {
           <p className="text-sm text-muted-foreground">This clears everything in the builder, including your saved copy.</p>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setConfirm(false)}>Keep my resume</Button>
-            <Button variant="destructive" onClick={() => { set(() => emptyResume()); setRev((r) => r + 1); setConfirm(false) }}>Start over</Button>
+            <Button variant="destructive" onClick={() => { reset(); setConfirm(false) }}>Start over</Button>
           </div>
         </DialogContent>
       </Dialog>

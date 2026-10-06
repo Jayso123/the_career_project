@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { emptyResume } from './resumeModel'
-import { adoptAnon, createSaver, keyFor, loadLocal, loadRemote, pickResume, removeLocal, saveLocal } from './resumeStorage'
+import { createSaver, keyFor, loadLocal, loadRemote, pickResume, removeLocal, saveLocal } from './resumeStorage'
 
 function timers() {
   let fn: (() => void) | null = null
@@ -80,14 +80,22 @@ describe('createSaver', () => {
     await mkSaver(db).s.flush()
     expect(upserts).toHaveLength(0)
   })
-  it('flush writes under the saver own uid', async () => {
+  it('each saver writes only under its own uid with its own data (owner switch)', async () => {
     const { db, upserts } = stub(['ok'])
     const a = mkSaver(db, 'userA'); const b = mkSaver(db, 'userB')
     a.s.save(r1)
-    await a.s.flush()
-    expect(upserts).toHaveLength(1)
-    expect(upserts[0][1]).toMatchObject({ student_id: 'userA' })
-    expect(b.t.pending()).toBe(false)
+    await a.s.flush() // A's cleanup on switch
+    b.s.save(r2)
+    await b.s.flush()
+    expect(upserts.map((u) => [(u[1] as { student_id: string }).student_id, (u[1] as { data: { summary: string } }).data.summary])).toEqual([['userA', 'one'], ['userB', 'two']])
+  })
+  it('flush resolves true when saved, false when the write failed', async () => {
+    const ok = mkSaver(stub(['ok']).db); ok.s.save(r1)
+    expect(await ok.s.flush()).toBe(true)
+    const bad = mkSaver(stub(['err']).db); bad.s.save(r1)
+    expect(await bad.s.flush()).toBe(false)
+    expect(await bad.s.flush()).toBe(false) // nothing pending, but the data never reached the account
+    expect(await mkSaver(stub(['ok']).db).s.flush()).toBe(true)
   })
   it('serialises upserts: a second one starts only after the first settles, with the latest data', async () => {
     const gates: (() => void)[] = []
@@ -141,18 +149,6 @@ describe('local storage', () => {
     expect(loadLocal('u1')).toBeNull()
     expect(() => saveLocal('u1', r1)).not.toThrow()
     expect(() => removeLocal('u1')).not.toThrow()
-  })
-  it('adoptAnon moves only the anon draft to the new owner and removes the anon key', () => {
-    stubMem()
-    saveLocal(null, r1, '2025-01-01T00:00:00.000Z')
-    saveLocal('other', r2)
-    const a = adoptAnon('u1')
-    expect(a?.data.summary).toBe('one')
-    expect(loadLocal('u1')?.data.summary).toBe('one')
-    expect(loadLocal(null)).toBeNull()
-    expect(loadLocal('other')?.data.summary).toBe('two')
-    expect(adoptAnon('u3')).toBeNull()
-    expect(loadLocal('u3')).toBeNull()
   })
 })
 

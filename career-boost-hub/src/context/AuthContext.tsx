@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
@@ -12,6 +12,8 @@ type AuthValue = {
   signIn: (email: string, password: string) => Promise<Result>
   signUp: (email: string, password: string, fullName: string) => Promise<Result>
   signOut: () => Promise<Result>
+  /** Register work to finish (awaited) before the session is dropped on sign-out. Returns an unregister fn. */
+  onBeforeSignOut: (f: () => Promise<unknown> | void) => () => void
 }
 
 const NOT_CONFIGURED: Result = { error: 'Supabase not configured' }
@@ -72,15 +74,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null }
   }, [])
 
+  const beforeSignOut = useRef(new Set<() => Promise<unknown> | void>())
+  const onBeforeSignOut = useCallback((f: () => Promise<unknown> | void) => {
+    beforeSignOut.current.add(f)
+    return () => { beforeSignOut.current.delete(f) }
+  }, [])
   const signOut = useCallback(async (): Promise<Result> => {
     if (!supabase) return NOT_CONFIGURED
+    await Promise.allSettled([...beforeSignOut.current].map(async (f) => f())) // flush while the session is still valid (RLS)
     const { error } = await supabase.auth.signOut()
     return { error: error?.message ?? null }
   }, [])
 
   const value = useMemo(
-    () => ({ user, profile, loading: !sessionReady || (!!user && profileFor !== user.id), signIn, signUp, signOut }),
-    [user, profile, sessionReady, profileFor, signIn, signUp, signOut],
+    () => ({ user, profile, loading: !sessionReady || (!!user && profileFor !== user.id), signIn, signUp, signOut, onBeforeSignOut }),
+    [user, profile, sessionReady, profileFor, signIn, signUp, signOut, onBeforeSignOut],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

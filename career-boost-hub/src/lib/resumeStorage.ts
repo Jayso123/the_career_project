@@ -40,15 +40,6 @@ export function removeLocal(uid: string | null | undefined): void {
   }
 }
 
-/** A newly signed-in user with no saved copy adopts their own pre-login (anon) draft, once. Never another user's data. */
-export function adoptAnon(uid: string): Stamped | null {
-  const anon = loadLocal(null)
-  if (!anon) return null
-  saveLocal(uid, anon.data, anon.updatedAt)
-  removeLocal(null)
-  return anon
-}
-
 const ts = (s: string) => (Number.isFinite(Date.parse(s)) ? Date.parse(s) : 0)
 
 /** Newer updatedAt wins; ties and invalid dates favour the account copy. */
@@ -129,9 +120,10 @@ export function createSaver(db: Db, uid: string, o: SaverOpts) {
       timer = set(() => { timer = undefined; return pump() }, o.delay ?? 800)
     },
     /** Write pending data immediately (unmount, user change, page hide). No-op when nothing is pending. */
-    flush(): Promise<void> {
+    flush(): Promise<boolean> {
       stop()
-      return last ? pump() : (current ?? Promise.resolve())
+      // resolves true when nothing is left unsaved (no pending data and the last write succeeded)
+      return (last ? pump() : (current ?? Promise.resolve())).then(() => !failing)
     },
     cancel() {
       stop()
