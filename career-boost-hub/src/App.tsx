@@ -4,6 +4,11 @@ import { Toaster as RadixToaster } from './components/ui/toaster'
 import Index from './pages/Index'
 import Payment from './pages/Payment'
 import NotFound from './pages/NotFound'
+import Login from './pages/Login'
+import Signup from './pages/Signup'
+import Dashboard from './pages/Dashboard'
+import ProtectedRoute from './components/ProtectedRoute'
+import { AuthProvider } from './context/AuthContext'
 
 export default function App() {
   return (
@@ -22,11 +27,16 @@ export default function App() {
         }}
       />
       <BrowserRouter>
+      <AuthProvider>
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/payment" element={<Payment />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </AuthProvider>
       </BrowserRouter>
     </>
   )

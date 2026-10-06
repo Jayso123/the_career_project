@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Rocket, Menu, X } from 'lucide-react'
 import { Button, buttonVariants } from '../ui/button'
 import { cn } from '../../lib/utils'
+import { useAuth } from '../../context/AuthContext'
+import AccountMenu from '../AccountMenu'
 
 const navLinks = [
   { name: 'Home', href: '#home' },
@@ -16,6 +18,7 @@ const navLinks = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
+  const { user } = useAuth()
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -69,16 +72,20 @@ export default function Navbar() {
           </div>
           {/* Login is the only addition vs the live site */}
           <div className="hidden md:flex items-center gap-3">
-            <Link
-              to="/login"
-              className={cn(
-                buttonVariants({ variant: 'outline', size: 'lg' }),
-                !scrolled &&
-                  'border-primary-foreground/80 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground',
-              )}
-            >
-              Login
-            </Link>
+            {user ? (
+              <AccountMenu scrolled={scrolled} />
+            ) : (
+              <Link
+                to="/login"
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'lg' }),
+                  !scrolled &&
+                    'border-primary-foreground/80 text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground',
+                )}
+              >
+                Login
+              </Link>
+            )}
             <Button variant={scrolled ? 'highlight' : 'hero'} size="lg" onClick={() => go('#contact')}>
               Book Session
             </Button>
@@ -105,13 +112,17 @@ export default function Navbar() {
                     {l.name}
                   </button>
                 ))}
-                <Link
-                  to="/login"
-                  onClick={() => setOpen(false)}
-                  className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'w-full mt-4')}
-                >
-                  Login
-                </Link>
+                {user ? (
+                  <AccountMenu scrolled={scrolled} block onNavigate={() => setOpen(false)} />
+                ) : (
+                  <Link
+                    to="/login"
+                    onClick={() => setOpen(false)}
+                    className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'w-full mt-4')}
+                  >
+                    Login
+                  </Link>
+                )}
                 <Button variant="highlight" size="lg" className="w-full mt-2" onClick={() => go('#pricing')}>
                   Book Session
                 </Button>
