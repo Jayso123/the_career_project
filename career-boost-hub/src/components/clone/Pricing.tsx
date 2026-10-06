@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import { Calendar } from '../ui/calendar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { cn } from '../../lib/utils'
+import { toStartsAtIso } from '../../lib/booking'
 
 export type Plan = {
   name: string
@@ -45,7 +46,7 @@ const PlanModal = ({ isOpen, onClose, plan }: { isOpen: boolean; onClose: () => 
   }
   const proceed = () => {
     if (complete && plan) {
-      const state = { date: format(date, 'PPP'), time, mentor: mentors.find((m) => m.id === mentorId), plan }
+      const state = { date: format(date, 'PPP'), time, mentor: mentors.find((m) => m.id === mentorId), plan, startsAt: toStartsAtIso(date, time) }
       navigate('/payment', { state })
       onClose()
       reset()

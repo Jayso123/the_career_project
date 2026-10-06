@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { redirectTarget } from './redirectTarget'
+import { redirectState, redirectTarget } from './redirectTarget'
 
 describe('redirectTarget', () => {
   it('defaults to /dashboard', () => {
@@ -15,5 +15,15 @@ describe('redirectTarget', () => {
     expect(redirectTarget({ from: 'https://evil.com' })).toBe('/dashboard')
     expect(redirectTarget({ from: '/\\evil.com' })).toBe('/dashboard')
     expect(redirectTarget({ from: 5 })).toBe('/dashboard')
+  })
+})
+
+describe('redirectState', () => {
+  it('restores booking only for /payment', () => {
+    const booking = { date: 'd' }
+    expect(redirectState({ from: '/payment', booking })).toBe(booking)
+    expect(redirectState({ from: '/admin', booking })).toBeUndefined()
+    expect(redirectState({ from: '/payment', booking: 'x' })).toBeUndefined()
+    expect(redirectState(null)).toBeUndefined()
   })
 })

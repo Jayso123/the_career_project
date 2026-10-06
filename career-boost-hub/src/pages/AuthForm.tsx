@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import ConnectSupabase from '../components/ConnectSupabase'
 import { useAuth } from '../context/AuthContext'
-import { redirectTarget } from '../lib/redirectTarget'
+import { redirectState, redirectTarget } from '../lib/redirectTarget'
 import { supabase } from '../lib/supabase'
 
 const labelClass = 'block text-sm font-medium text-foreground mb-2'
@@ -27,7 +27,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
   const [busy, setBusy] = useState(false)
   const to = redirectTarget(location.state)
 
-  if (!loading && user) return <Navigate to={to} replace />
+  if (!loading && user) return <Navigate to={to} replace state={redirectState(location.state)} />
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -42,7 +42,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
     setBusy(false)
     if (err) return setError(err)
     if (isSignup) setNotice('Account created. If email confirmation is enabled, check your inbox, then log in.')
-    else navigate(to, { replace: true })
+    else navigate(to, { replace: true, state: redirectState(location.state) })
   }
 
   const set = (k: keyof typeof form) => (e: ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value })

@@ -57,6 +57,9 @@ export default function AccountMenu({ scrolled, block, onNavigate }: { scrolled:
           <Link to="/dashboard" onClick={done} className={item}>
             Dashboard
           </Link>
+          <Link to="/mentors" onClick={done} className={item}>
+            Mentors
+          </Link>
           {profile?.role === 'admin' && (
             <Link to="/admin" onClick={done} className={item}>
               Admin

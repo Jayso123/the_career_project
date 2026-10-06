@@ -48,3 +48,9 @@ To enable owner notification emails:
    - `VITE_EMAILJS_PUBLIC_KEY` – your EmailJS public key
    - `VITE_OWNER_EMAIL` – the owner's email address (recipient of notifications)
 4. Restart the dev server after editing `.env`
+
+## Booking flow
+
+Pricing modal (mentor, date, time, plan) -> `/payment` -> Phone + Requirements -> **Pay**. A signed-in student is required; guests are sent to `/login` and returned to `/payment` with their details intact. On Pay (mock mode, `VITE_PAYMENT_MODE=mock`): the mentor is looked up by name, a `sessions` row is inserted (a double booking of the same mentor + time is rejected as "That slot was just taken"), a `payments` row is recorded with `mode='mock'` and a `MOCK-` reference, the session is linked to it, and the owner gets a booking email (best effort; it never fails the booking). Mock mode shows "Demo payment — no money is charged" and never loads Razorpay.
+
+Database setup, in the Supabase SQL editor, in order: `supabase/migrations/0001_init.sql` -> `supabase/migrations/0002_session_guard.sql` -> `supabase/seed.sql` (adds the 5 mentors the booking modal uses).

@@ -3,6 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { User, Calendar, Clock, Package, CircleCheck, CreditCard, ArrowLeft, Lock, Shield } from 'lucide-react'
 import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Textarea } from '../components/ui/textarea'
+import { env } from '../lib/env'
+import { phoneRe } from '../lib/contactSchema'
 import { useToast } from '../components/ui/use-toast'
 
 export interface PaymentState {
@@ -10,19 +14,23 @@ export interface PaymentState {
   time: string
   mentor: { id?: number | string; name: string; expertise: string; experience?: string }
   plan: { name: string; price: string; period?: string; description: string; features: string[]; popular?: boolean }
+  startsAt?: string
+  phone?: string
+  requirements?: string
 }
 
 export interface PayContext extends PaymentState {
   amount: number
 }
 
-export type PayResult = void | { paymentId?: string }
+export type PayResult = void | { paymentId?: string; cancelled?: boolean }
 export type OnPay = (ctx: PayContext) => Promise<PayResult> | PayResult
 
 // Live site loads Razorpay's checkout script and the Pay button stays disabled until it is ready.
-function useRazorpayScript() {
+function useRazorpayScript(enabled: boolean) {
   const [loaded, setLoaded] = useState(false)
   useEffect(() => {
+    if (!enabled) return
     if (document.getElementById('razorpay-script')) {
       setLoaded(true)
       return
@@ -34,7 +42,7 @@ function useRazorpayScript() {
     s.onload = () => setLoaded(true)
     s.onerror = () => console.error('Failed to load Razorpay script')
     document.body.appendChild(s)
-  }, [])
+  }, [enabled])
   return loaded
 }
 
@@ -51,7 +59,15 @@ const Spinner = () => (
 export function PaymentView({ state, onPay }: { state: PaymentState; onPay?: OnPay }) {
   const navigate = useNavigate()
   const { toast } = useToast()
-  const scriptLoaded = useRazorpayScript()
+  const mock = env.paymentMode === 'mock'
+  const razorpayLoaded = useRazorpayScript(!mock)
+  const scriptLoaded = mock || razorpayLoaded
+  const [phone, setPhone] = useState(state.phone ?? '')
+  const [requirements, setRequirements] = useState(state.requirements ?? '')
+  const phoneError = phoneRe.test(phone.trim()) ? '' : 'Enter a valid phone number (8-15 digits)'
+  const reqLen = requirements.trim().length
+  const reqError = reqLen < 10 ? 'Tell us what you need help with (at least 10 characters)' : reqLen > 1000 ? 'Keep it under 1000 characters' : ''
+  const invalid = !!(phoneError || reqError)
   const [isLoading, setIsLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [paymentId, setPaymentId] = useState<string | undefined>()
@@ -67,8 +83,11 @@ export function PaymentView({ state, onPay }: { state: PaymentState; onPay?: OnP
     try {
       // Without onPay there is no payment backend in this clone (live used Razorpay via a Supabase edge function).
       if (!onPay) throw new Error('Payment gateway is not configured')
-      const res = await onPay({ ...state, amount })
-      if (res && typeof res === 'object') setPaymentId(res.paymentId)
+      const res = await onPay({ ...state, phone: phone.trim(), requirements: requirements.trim(), amount })
+      if (res && typeof res === 'object') {
+        if (res.cancelled) return
+        setPaymentId(res.paymentId)
+      }
       setDone(true)
       toast({ title: 'Payment Successful!', description: 'Your mentorship session has been booked.' })
     } catch (e) {
@@ -207,6 +226,11 @@ export function PaymentView({ state, onPay }: { state: PaymentState; onPay?: OnP
             </div>
           </motion.div>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-6">
+            {mock && (
+              <div role="status" className="p-4 rounded-lg border border-highlight bg-highlight/10 text-sm font-medium text-foreground text-center">
+                Demo payment — no money is charged
+              </div>
+            )}
             <div className="bg-card rounded-xl border border-border p-6">
               <div className="text-center mb-6">
                 <CreditCard className="w-12 h-12 text-accent mx-auto mb-4" />
@@ -228,7 +252,19 @@ export function PaymentView({ state, onPay }: { state: PaymentState; onPay?: OnP
                   <span className="text-xs text-muted-foreground">Wallets</span>
                 </div>
               </div>
-              <Button variant="highlight" size="lg" className="w-full" onClick={handlePay} disabled={isLoading || !scriptLoaded}>
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label htmlFor="pay-phone" className="block text-sm font-medium text-foreground mb-2">Phone</label>
+                  <Input id="pay-phone" type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" className="h-12" />
+                  {phone && phoneError && <p role="alert" className="text-sm text-destructive mt-1">{phoneError}</p>}
+                </div>
+                <div>
+                  <label htmlFor="pay-requirements" className="block text-sm font-medium text-foreground mb-2">Requirements</label>
+                  <Textarea id="pay-requirements" value={requirements} onChange={(e) => setRequirements(e.target.value)} maxLength={1000} rows={4} placeholder="What would you like to cover in this session?" />
+                  {requirements && reqError && <p role="alert" className="text-sm text-destructive mt-1">{reqError}</p>}
+                </div>
+              </div>
+              <Button variant="highlight" size="lg" className="w-full" onClick={handlePay} disabled={isLoading || !scriptLoaded || invalid}>
                 {isLoading ? (
                   <span className="flex items-center gap-2">
                     <Spinner />
