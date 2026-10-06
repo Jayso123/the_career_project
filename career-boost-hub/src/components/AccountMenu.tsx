@@ -63,6 +63,9 @@ export default function AccountMenu({ scrolled, block, onNavigate }: { scrolled:
           <Link to="/ats-checker" onClick={done} className={item}>
             ATS Checker
           </Link>
+          <Link to="/resume-builder" onClick={done} className={item}>
+            Resume Builder
+          </Link>
           {profile?.role === 'admin' && (
             <Link to="/admin" onClick={done} className={item}>
               Admin

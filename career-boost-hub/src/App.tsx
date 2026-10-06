@@ -18,6 +18,7 @@ import { AuthProvider } from './context/AuthContext'
 import { env } from './lib/env'
 import { useMockPay } from './lib/bookingService'
 const AtsChecker = lazy(() => import('./pages/AtsChecker'))
+const ResumeBuilder = lazy(() => import('./pages/ResumeBuilder'))
 
 function PaymentRoute() {
   const mockPay = useMockPay()
@@ -56,6 +57,14 @@ export default function App() {
           element={
             <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" aria-label="Loading" /></div>}>
               <AtsChecker />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/resume-builder"
+          element={
+            <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" aria-label="Loading" /></div>}>
+              <ResumeBuilder />
             </Suspense>
           }
         />
