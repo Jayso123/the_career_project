@@ -1,3 +1,6 @@
+import { Toaster } from 'sonner'
+import Index from './pages/Index'
+
 export default function App() {
-  return <main className="p-8 text-brand">Career Boost Hub</main>
+  return <><Index /><Toaster richColors position="top-center" /></>
 }
