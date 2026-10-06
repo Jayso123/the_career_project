@@ -6,6 +6,10 @@ import WhyChooseUs from '../components/clone/WhyChooseUs'
 import Services from '../components/clone/Services'
 import CareerPaths from '../components/clone/CareerPaths'
 import CareerJourney from '../components/clone/CareerJourney'
+import Pricing from '../components/clone/Pricing'
+import Testimonials from '../components/clone/Testimonials'
+import Contact from '../components/clone/Contact'
+import Footer from '../components/clone/Footer'
 
 export default function Index() {
   return (
@@ -18,6 +22,10 @@ export default function Index() {
         <Services />
         <CareerPaths />
         <CareerJourney />
+        <Pricing />
+        <Testimonials />
+        <Contact />
+        <Footer />
       </main>
     </PageWrapper>
   )
