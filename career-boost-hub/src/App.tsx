@@ -7,13 +7,8 @@ import NotFound from './pages/NotFound'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <>
       <RadixToaster />
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/payment" element={<Payment />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
       <Toaster
         theme="system"
         className="toaster group"
@@ -26,6 +21,13 @@ export default function App() {
           },
         }}
       />
-    </BrowserRouter>
+      <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Index />} />
+        <Route path="/payment" element={<Payment />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+      </BrowserRouter>
+    </>
   )
 }
