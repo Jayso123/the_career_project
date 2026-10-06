@@ -23,9 +23,9 @@ create table sessions (
   requirements text not null default '',
   status text not null default 'booked' check (status in ('booked','completed','cancelled')),
   payment_id uuid,
-  created_at timestamptz not null default now(),
-  unique (mentor_id, starts_at)
+  created_at timestamptz not null default now()
 );
+create unique index sessions_active_slot on sessions (mentor_id, starts_at) where status <> 'cancelled';
 
 create table payments (
   id uuid primary key default gen_random_uuid(),
@@ -58,18 +58,23 @@ create table resumes (
 create table leads (
   id uuid primary key default gen_random_uuid(),
   name text not null, email text not null, phone text not null, goals text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  check (length(name) < 200 and length(email) < 320 and length(phone) < 40 and length(goals) < 2000)
 );
 
-create function is_admin() returns boolean language sql security definer stable as
-$$ select exists (select 1 from profiles where id = auth.uid() and role = 'admin') $$;
+create function public.is_admin() returns boolean language sql security definer stable
+set search_path = '' as
+$$ select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin') $$;
 
-create function handle_new_user() returns trigger language plpgsql security definer as $$
+create function public.handle_new_user() returns trigger language plpgsql security definer
+set search_path = '' as $$
 begin
-  insert into profiles (id, full_name) values (new.id, coalesce(new.raw_user_meta_data->>'full_name', ''));
+  insert into public.profiles (id, full_name) values (new.id, coalesce(new.raw_user_meta_data->>'full_name', ''));
   return new;
 end $$;
-create trigger on_auth_user_created after insert on auth.users for each row execute function handle_new_user();
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+grant execute on function public.is_admin() to anon, authenticated;
+create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();
 
 alter table profiles enable row level security;
 alter table mentors enable row level security;
@@ -93,8 +98,10 @@ create policy mentors_admin on mentors for all using (is_admin()) with check (is
 create policy sessions_read on sessions for select using (
   student_id = auth.uid() or is_admin()
   or mentor_id in (select id from mentors where profile_id = auth.uid()));
-create policy sessions_insert on sessions for insert with check (student_id = auth.uid());
-create policy sessions_update on sessions for update using (student_id = auth.uid() or is_admin());
+create policy sessions_insert on sessions for insert
+  with check (student_id = auth.uid() and status = 'booked' and starts_at > now());
+create policy sessions_update on sessions for update using (student_id = auth.uid() or is_admin())
+  with check (is_admin() or (student_id = auth.uid() and status in ('booked','cancelled')));
 
 create policy payments_read on payments for select using (student_id = auth.uid() or is_admin());
 create policy payments_insert on payments for insert with check (student_id = auth.uid());
@@ -107,7 +114,7 @@ create policy leads_insert on leads for insert to anon, authenticated with check
 create policy leads_read on leads for select using (is_admin());
 
 -- booked slots are exposed only as times (students cannot read other students' sessions)
-create function taken_slots(p_mentor uuid) returns setof timestamptz
-language sql security definer stable as
-$$ select starts_at from sessions where mentor_id = p_mentor and status <> 'cancelled' and starts_at > now() $$;
-grant execute on function taken_slots(uuid) to anon, authenticated;
+create function public.taken_slots(p_mentor uuid) returns setof timestamptz
+language sql security definer stable set search_path = '' as
+$$ select starts_at from public.sessions where mentor_id = p_mentor and status <> 'cancelled' and starts_at > now() $$;
+grant execute on function public.taken_slots(uuid) to anon, authenticated;

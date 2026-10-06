@@ -22,14 +22,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   // loading stays true until the session is known AND (if signed in) the profile is loaded
   const [sessionReady, setSessionReady] = useState(!supabase)
-  const [profileReady, setProfileReady] = useState(true)
+  // id of the user whose profile fetch has finished (success or failure)
+  const [profileFor, setProfileFor] = useState<string | null>(null)
 
   useEffect(() => {
     if (!supabase) return
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null)
-      setSessionReady(true)
-    })
+    supabase.auth
+      .getSession()
+      .then(({ data }) => setUser(data.session?.user ?? null))
+      .catch((e) => console.warn('getSession failed:', e?.message))
+      .finally(() => setSessionReady(true))
     const { data } = supabase.auth.onAuthStateChange((_e, session) => setUser(session?.user ?? null))
     return () => data.subscription.unsubscribe()
   }, [])
@@ -38,20 +40,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!supabase || !userId) {
       setProfile(null)
-      setProfileReady(true)
+      setProfileFor(null)
       return
     }
     let cancelled = false
-    setProfileReady(false)
     supabase
       .from('profiles')
       .select('id, full_name, role')
       .eq('id', userId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         if (cancelled) return
+        if (error) console.warn('profile fetch failed:', error.message)
         setProfile((data as Profile | null) ?? null)
-        setProfileReady(true)
+        setProfileFor(userId)
       })
     return () => {
       cancelled = true
@@ -77,8 +79,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, profile, loading: !sessionReady || !profileReady, signIn, signUp, signOut }),
-    [user, profile, sessionReady, profileReady, signIn, signUp, signOut],
+    () => ({ user, profile, loading: !sessionReady || (!!user && profileFor !== user.id), signIn, signUp, signOut }),
+    [user, profile, sessionReady, profileFor, signIn, signUp, signOut],
   )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

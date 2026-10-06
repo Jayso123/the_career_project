@@ -70,7 +70,7 @@ export default function Navbar() {
               </motion.button>
             ))}
           </div>
-          {/* Login is the only addition vs the live site */}
+          {/* Only addition vs the live site: Login, replaced by AccountMenu when signed in */}
           <div className="hidden md:flex items-center gap-3">
             {user ? (
               <AccountMenu scrolled={scrolled} />

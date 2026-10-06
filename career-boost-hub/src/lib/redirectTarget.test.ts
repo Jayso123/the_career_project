@@ -13,6 +13,7 @@ describe('redirectTarget', () => {
   it('rejects external or non-string targets', () => {
     expect(redirectTarget({ from: '//evil.com' })).toBe('/dashboard')
     expect(redirectTarget({ from: 'https://evil.com' })).toBe('/dashboard')
+    expect(redirectTarget({ from: '/\\evil.com' })).toBe('/dashboard')
     expect(redirectTarget({ from: 5 })).toBe('/dashboard')
   })
 })

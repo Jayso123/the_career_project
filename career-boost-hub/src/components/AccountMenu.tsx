@@ -19,7 +19,12 @@ export default function AccountMenu({ scrolled, block, onNavigate }: { scrolled:
   useEffect(() => {
     const close = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false)
     document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', esc)
+    }
   }, [])
 
   const done = () => {
@@ -31,6 +36,7 @@ export default function AccountMenu({ scrolled, block, onNavigate }: { scrolled:
     <div ref={ref} className={cn('relative', block && 'w-full mt-4')}>
       <button
         type="button"
+        aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
         className={cn(

@@ -30,3 +30,7 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Database
+
+Run `supabase/migrations/0001_init.sql` in the Supabase SQL editor. Admins cannot change roles via the API; promote one with `update public.profiles set role='admin' where id='<uid>'` in the SQL editor. Insert leads without `.select()` (anon cannot read them back).
