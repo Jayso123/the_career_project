@@ -12,12 +12,12 @@ const SECTION_LABELS: Record<keyof AtsResult['sections'], string> = {
   contact: 'Contact', summary: 'Summary', experience: 'Experience', education: 'Education', skills: 'Skills',
 }
 
-function Gauge({ score }: { score: number }) {
+function Gauge({ score, label }: { score: number; label: string }) {
   const r = 52
   const c = 2 * Math.PI * r
   const tone = score >= 75 ? 'text-accent' : score >= 50 ? 'text-amber-500' : 'text-destructive'
   return (
-    <svg viewBox="0 0 120 120" className={cn('w-36 h-36', tone)} role="img" aria-label={`ATS score ${score} out of 100`}>
+    <svg viewBox="0 0 120 120" className={cn('w-36 h-36', tone)} role="img" aria-label={`${label} ${score} out of 100`}>
       <circle cx="60" cy="60" r={r} fill="none" strokeWidth="10" className="stroke-muted" />
       <circle
         cx="60" cy="60" r={r} fill="none" strokeWidth="10" strokeLinecap="round" stroke="currentColor"
@@ -34,14 +34,18 @@ const Chip = ({ children, tone }: { children: React.ReactNode; tone: 'accent' | 
   </li>
 )
 
-function Result({ r, hasJd }: { r: AtsResult; hasJd: boolean }) {
+function Result({ r, stale }: { r: AtsResult; stale: boolean }) {
+  const shown = r.hasKeywords ? r.score : r.formatScore
+  const label = r.hasKeywords ? 'ATS score' : 'Formatting score'
   return (
-    <div className="space-y-6">
+    <div className={cn('space-y-6 transition-opacity', stale && 'opacity-50')}>
+      <p className="sr-only" role="status" aria-live="polite">{stale ? '' : `${label} ${shown} out of 100`}</p>
+      {stale && <p className="text-sm font-medium text-amber-600">Inputs changed - press Analyze again</p>}
       <div className="flex flex-col items-center gap-1">
-        <Gauge score={r.score} />
-        <p className="text-sm text-muted-foreground">{hasJd ? 'Keyword match + section coverage' : 'Section coverage only'}</p>
+        <Gauge score={shown} label={label} />
+        <p className="text-sm text-muted-foreground">{r.hasKeywords ? 'Keyword match + section coverage' : 'Formatting score only. Add a job description for keyword matching.'}</p>
       </div>
-      {hasJd && (
+      {r.hasKeywords && (
         <>
           <div>
             <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">Matched keywords ({r.matched.length})</h3>
@@ -81,12 +85,14 @@ export default function AtsChecker() {
   const [jd, setJd] = useState('')
   const [parsing, setParsing] = useState(false)
   const [fileErr, setFileErr] = useState('')
-  const [result, setResult] = useState<{ r: AtsResult; hasJd: boolean } | null>(null)
+  const [result, setResult] = useState<{ r: AtsResult; resume: string; jd: string } | null>(null)
+  const [notice, setNotice] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const onFile = async (file: File | undefined) => {
     if (!file) return
     setFileErr('')
+    setNotice('')
     const bad = validateResumeFile(file)
     if (bad) {
       setFileErr(bad)
@@ -95,9 +101,10 @@ export default function AtsChecker() {
     }
     setParsing(true)
     try {
-      const text = await readResumeFile(file)
+      const { text, truncated } = await readResumeFile(file)
       if (!text) throw new Error('empty')
       setResume(text)
+      if (truncated) setNotice('Only the first 20 pages were read')
     } catch {
       toast({ title: "Couldn't read that file; paste the text instead", variant: 'destructive' })
     } finally {
@@ -106,7 +113,7 @@ export default function AtsChecker() {
     }
   }
 
-  const analyze = () => setResult({ r: scoreResume(resume, jd), hasJd: jd.trim().length > 0 })
+  const analyze = () => setResult({ r: scoreResume(resume, jd), resume, jd })
 
   return (
     <div className="min-h-screen bg-background">
@@ -125,6 +132,7 @@ export default function AtsChecker() {
                 className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-secondary-foreground"
               />
               {parsing && <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status"><Loader2 className="w-4 h-4 animate-spin" />Reading file...</p>}
+              {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
               {fileErr && <p role="alert" className="text-sm text-destructive">{fileErr}</p>}
             </div>
             <div className="space-y-2">
@@ -140,9 +148,9 @@ export default function AtsChecker() {
               {parsing && <Loader2 className="animate-spin" />}Analyze
             </Button>
           </section>
-          <section className="rounded-xl border bg-card p-6 shadow-sm" aria-live="polite" aria-label="ATS results">
+          <section className="rounded-xl border bg-card p-6 shadow-sm" aria-label="ATS results">
             <h2 className="font-display text-xl font-bold text-foreground mb-4">Your result</h2>
-            {result ? <Result r={result.r} hasJd={result.hasJd} /> : <p className="text-sm text-muted-foreground">Paste or upload your resume and press Analyze to see your score.</p>}
+            {result ? <Result r={result.r} stale={result.resume !== resume || result.jd !== jd} /> : <p className="text-sm text-muted-foreground">Paste or upload your resume and press Analyze to see your score.</p>}
           </section>
         </div>
       </main>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateResumeFile, normalizeText, MAX_BYTES } from './readResumeFile'
+import { validateResumeFile, normalizeText, capPages, MAX_BYTES, MAX_PDF_PAGES } from './readResumeFile'
 
 const f = (name: string, size = 100, type = '') => ({ name, size, type })
 
@@ -14,6 +14,11 @@ describe('validateResumeFile', () => {
     expect(validateResumeFile(f('noext'))).toMatch(/Unsupported/)
     expect(validateResumeFile(f('cv.doc'))).toMatch(/Unsupported/)
   })
+  it('allows octet-stream and empty MIME for a valid extension', () => {
+    expect(validateResumeFile(f('cv.docx', 10, 'application/octet-stream'))).toBeNull()
+    expect(validateResumeFile(f('cv.pdf', 10, ''))).toBeNull()
+    expect(validateResumeFile(f('cv.exe', 10, 'application/octet-stream'))).toMatch(/Unsupported/)
+  })
   it('rejects extension/MIME mismatch', () => {
     expect(validateResumeFile(f('cv.pdf', 10, 'image/png'))).toMatch(/doesn't match/)
   })
@@ -27,5 +32,13 @@ describe('validateResumeFile', () => {
 describe('normalizeText', () => {
   it('collapses whitespace, strips control chars, caps blank lines', () => {
     expect(normalizeText('a  \t b\r\n\r\n\r\n\r\nc\u0000d  ')).toBe('a b\n\nc d')
+  })
+})
+
+describe('capPages', () => {
+  it('caps at the limit and reports truncation', () => {
+    expect(capPages(3)).toEqual({ pages: 3, truncated: false })
+    expect(capPages(MAX_PDF_PAGES)).toEqual({ pages: MAX_PDF_PAGES, truncated: false })
+    expect(capPages(MAX_PDF_PAGES + 1)).toEqual({ pages: MAX_PDF_PAGES, truncated: true })
   })
 })

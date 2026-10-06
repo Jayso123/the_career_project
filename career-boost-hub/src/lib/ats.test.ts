@@ -37,12 +37,23 @@ describe('scoreResume edge cases', () => {
   it('whitespace-only resume scores 0', () => {
     expect(scoreResume('  \n\t  ', jd).score).toBe(0)
   })
-  it('stop-word-only JD: no missing, score from sections only, no NaN', () => {
+  it('stop-word-only JD: no keywords, score 0, formatScore from sections, no NaN', () => {
     const r = scoreResume(resume, 'the and of to')
     expect(r.missing).toEqual([])
     expect(r.matched).toEqual([])
-    expect(Number.isNaN(r.score)).toBe(false)
-    expect(r.score).toBe(100) // all 5 sections, scaled to full range
+    expect(r.hasKeywords).toBe(false)
+    expect(r.score).toBe(0)
+    expect(r.formatScore).toBe(100)
+  })
+  it('empty JD: score 0, formatScore 100, hasKeywords false', () => {
+    const r = scoreResume(resume, '')
+    expect(r.score).toBe(0)
+    expect(r.formatScore).toBe(100)
+    expect(r.hasKeywords).toBe(false)
+    expect(r.warnings.join(' ')).toMatch(/job description/i)
+  })
+  it('real JD sets hasKeywords', () => {
+    expect(scoreResume(resume, jd).hasKeywords).toBe(true)
   })
   it('duplicate keywords are counted once', () => {
     const r = scoreResume(resume, 'python python python python sql')
@@ -75,5 +86,79 @@ describe('scoreResume edge cases', () => {
       expect(s).toBeGreaterThanOrEqual(0)
       expect(s).toBeLessThanOrEqual(100)
     }
+  })
+})
+
+describe('hardening', () => {
+  const fast = (text: string) => {
+    const t = performance.now()
+    scoreResume(text, jd)
+    return performance.now() - t
+  }
+  it('200k chars of one letter is fast', () => expect(fast('a'.repeat(200_000))).toBeLessThan(200))
+  it('200k of a@ pairs is fast', () => expect(fast('a@'.repeat(100_000))).toBeLessThan(200))
+  it('200k of digits/dashes is fast', () => expect(fast('1-'.repeat(100_000))).toBeLessThan(200))
+  it('200k of spaces and repeated heading words is fast', () => {
+    expect(fast(' '.repeat(200_000))).toBeLessThan(200)
+    expect(fast('skills '.repeat(28_000))).toBeLessThan(200)
+  })
+  it('truncates and warns', () => {
+    expect(scoreResume('python '.repeat(40_000), jd).warnings.join(' ')).toMatch(/first 200,000 characters/)
+    expect(scoreResume(resume, 'python '.repeat(10_000)).warnings.join(' ')).toMatch(/first 50,000/)
+    expect(scoreResume(resume, jd).warnings.join(' ')).not.toMatch(/200,000/)
+  })
+})
+
+describe('tokenizer', () => {
+  it('keeps accented words whole', () => {
+    expect(scoreResume('Skills: résumé', 'résumé').matched).toEqual(['résumé'])
+  })
+  it('python3, .net and node.js', () => {
+    const r = scoreResume('Skills: Python3, .NET, Node.js.', 'python3 .net node.js')
+    expect(r.matched).toEqual(expect.arrayContaining(['python3', 'net', 'node.js']))
+    expect(r.missing).toEqual([])
+  })
+  it('ci/cd splits into ci and cd (documented)', () => {
+    expect(scoreResume('Skills: CI/CD', 'ci/cd').matched.sort()).toEqual(['cd', 'ci'])
+  })
+  it('short skills AI/ML/UX/Go/R are kept and matched', () => {
+    const r = scoreResume('Skills: AI, ML, UX, Go, R', 'AI ML UX Go R')
+    expect(r.matched).toEqual(expect.arrayContaining(['ai', 'ml', 'ux', 'go', 'r']))
+    expect(r.missing).toEqual([])
+  })
+  it('extra stop words are ignored', () => {
+    expect(scoreResume(resume, 'this should must including years').hasKeywords).toBe(false)
+  })
+})
+
+describe('section false positives', () => {
+  const base = (t: string) => scoreResume(t, '').sections
+  it('"higher education guidance" in a sentence is not an Education section', () => {
+    expect(base('I offer higher education guidance to students').education).toBe(false)
+  })
+  it('headings count: colon, line start, one-line PDF text', () => {
+    expect(base('Education: B.Tech').education).toBe(true)
+    expect(base('Name\nEducation\nCollege').education).toBe(true)
+    expect(base('Asha Rao  Education  Skills  Python').education).toBe(true)
+    expect(base('Asha Rao. Skills Python SQL').skills).toBe(true)
+  })
+  it('plain prose does not count', () => {
+    const s = base('I like to share my experience and a profile of skills in prose')
+    expect(s.experience).toBe(false)
+    expect(s.summary).toBe(false)
+    expect(s.skills).toBe(false)
+  })
+})
+
+describe('phone detection', () => {
+  const contact = (t: string) => scoreResume(t, '').sections.contact
+  it('date ranges are not phones', () => {
+    expect(contact('a@b.com 2019 - 2023 2')).toBe(false)
+    expect(contact('a@b.com 2019 - 2023 - 2021 - 2022')).toBe(false)
+  })
+  it('real phones are', () => {
+    expect(contact('a@b.com +91 98765 43210')).toBe(true)
+    expect(contact('a@b.com 9876543210')).toBe(true)
+    expect(contact('a@b.com (555) 123-4567')).toBe(true)
   })
 })

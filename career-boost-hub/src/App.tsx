@@ -15,9 +15,9 @@ import Mentors from './pages/Mentors'
 import MentorProfile from './pages/MentorProfile'
 import { AuthProvider } from './context/AuthContext'
 
-const AtsChecker = lazy(() => import('./pages/AtsChecker'))
 import { env } from './lib/env'
 import { useMockPay } from './lib/bookingService'
+const AtsChecker = lazy(() => import('./pages/AtsChecker'))
 
 function PaymentRoute() {
   const mockPay = useMockPay()
