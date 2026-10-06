@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Rocket, Menu, X } from 'lucide-react'
 import { Button, buttonVariants } from '../ui/button'
@@ -15,8 +15,11 @@ const navLinks = [
   { name: 'Contact', href: '#contact' },
 ]
 
-export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false)
+/** `solid` forces the opaque (scrolled) look, for pages without a hero behind the navbar. */
+export default function Navbar({ solid }: { solid?: boolean } = {}) {
+  const [pastTop, setScrolled] = useState(false)
+  const scrolled = pastTop || !!solid
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const { user } = useAuth()
 
@@ -28,7 +31,8 @@ export default function Navbar() {
 
   const go = (sel: string) => {
     const el = document.querySelector(sel)
-    el && el.scrollIntoView({ behavior: 'smooth' })
+    if (el) el.scrollIntoView({ behavior: 'smooth' })
+    else navigate('/' + sel) // section lives on the home page
     setOpen(false)
   }
 
