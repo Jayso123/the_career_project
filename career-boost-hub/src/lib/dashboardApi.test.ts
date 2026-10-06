@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addItem, cancelSession, createGuard, deleteItem, fetchSessions, insertMany, optimistic, toggleDone } from './dashboardApi'
+import { addItem, cancelSession, createGuard, deleteItem, fetchItems, fetchSessions, insertMany, optimistic, toggleDone } from './dashboardApi'
 
 type Res = { data?: unknown; error?: unknown }
 // chainable fake db: result per "table.op"; records calls; a throw result simulates a network failure
@@ -97,5 +97,15 @@ describe('api calls', () => {
     expect((await fetchSessions(f.db, 'u1')).data).toHaveLength(1)
     expect(f.calls).toContainEqual(['sessions', 'eq', 'student_id', 'u1'])
     expect((await fetchSessions(fake({ 'sessions.select': 'throw' }).db, 'u1')).error).toBeTruthy()
+  })
+  it('fetchItems selects created_at and orders by due_on (nulls last) then created_at', async () => {
+    for (const t of ['roadmap_items', 'milestones'] as const) {
+      const f = fake({ [`${t}.select`]: { data: [] } })
+      await fetchItems(f.db, t, 'u1')
+      expect(f.calls[0]?.[2]).toMatch(/created_at/)
+      expect(f.calls).toContainEqual([t, 'eq', 'student_id', 'u1'])
+      const orders = f.calls.filter((c) => c[1] === 'order').map((c) => c.slice(2))
+      expect(orders).toEqual([['due_on', { ascending: true, nullsFirst: false }], ['created_at', { ascending: true }]])
+    }
   })
 })

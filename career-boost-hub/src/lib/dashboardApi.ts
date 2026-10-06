@@ -37,8 +37,10 @@ export async function fetchSessions(db: Db, uid: string) {
 
 export const fetchItems = (db: Db, table: Table, uid: string) =>
   safe<Item[]>(() => {
-    const q = db.from(table).select(COLS[table]).eq('student_id', uid)
-    return (table === 'milestones' ? q.eq('kind', 'interview_prep') : q) as never
+    const q = db.from(table).select(`${COLS[table]}, created_at`).eq('student_id', uid)
+    return (table === 'milestones' ? q.eq('kind', 'interview_prep') : q)
+      .order('due_on', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: true }) as never
   })
 
 export const toggleDone = async (db: Db, table: Table, id: string, done: boolean): Promise<Err> =>
