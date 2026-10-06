@@ -7,8 +7,6 @@
 //  - Normal targets: scroll to the element, hide other fixed overlays (progress bar, badge), element screenshot.
 //  - Pinned targets (CareerPaths, CareerJourney): shot twice with the page scrolled to progress 0 ("start",
 //    spacer top) and progress 1 ("end", spacer bottom - viewport), so the pinned viewport-sized frame is compared.
-//  - The live site declares Inter / Plus Jakarta Sans but ships no @font-face, so it renders the system-ui fallback.
-//    To compare layout fairly, webfont requests on the LOCAL page are aborted (set KEEP_FONTS=1 to keep them).
 //  - Intentional differences: #lovable-badge is hidden; the navbar Login button is display:none'd (all pages; a mask would not
 //    absorb the layout shift it causes in the justify-between row).
 import { chromium } from 'playwright'
@@ -26,7 +24,6 @@ fs.mkdirSync(OUT, { recursive: true })
 const settle = (p, ms) => p.waitForTimeout(ms)
 
 async function prep(page, url, width) {
-  if (url === LOCAL && !process.env.KEEP_FONTS) await page.route(/\.(woff2?|ttf)(\?|$)/, (r) => r.abort())
   await page.setViewportSize({ width, height: 800 })
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.addStyleTag({ content: '#lovable-badge{display:none!important}' })
