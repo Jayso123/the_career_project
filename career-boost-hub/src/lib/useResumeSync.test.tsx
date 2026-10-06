@@ -236,6 +236,28 @@ describe('useResumeSync', () => {
     expect(loadLocal('u1')).toMatchObject({ updatedAt: OLD, data: { summary: 'acct', template: 'classic' } })
   })
 
+  it('OPEN1(iv): an edit during loading is rejected even when the read then FAILS (only the ready guard protects this)', async () => {
+    const f = fakeDb()
+    f.rows.set('u1', { data: resume('acct'), updated_at: OLD })
+    let release!: () => void
+    f.state.gate = new Promise((r) => { release = r })
+    f.state.readFails = 1
+    const t = setup({ uid: 'u1' }, f)
+    await tick(300)
+    await act(() => t.hook.result.current.set((d) => ({ ...d, summary: 'ghost' })))
+    await tick(500) // the 200 ms local timer would have fired by now
+    release()
+    await tick(0)
+    expect(t.hook.result.current.sync).toBe('failed')
+    expect(t.hook.result.current.data.summary).toBe('')
+    expect(loadLocal('u1')).toBeNull()
+    f.state.gate = null
+    act(() => t.hook.result.current.retry())
+    await tick(2000)
+    expect(f.upserts).toEqual([])
+    expect(t.hook.result.current.data.summary).toBe('acct')
+  })
+
   it('OPEN1(iii): edits are accepted again once ready, and in the failed state', async () => {
     const f = fakeDb()
     const t = setup({ uid: 'u1' }, f)
@@ -261,8 +283,11 @@ describe('useResumeSync', () => {
     await tick(2000)
     await edit(t, 'A-data')
     f.state.upsertFails = true
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     t.hook.rerender({ uid: 'u2' })
     await tick(2000)
     expect(t.onFailure).not.toHaveBeenCalled()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
   })
 })

@@ -30,6 +30,7 @@ describe('AuthContext.signOut', () => {
     await act(() => vi.advanceTimersByTimeAsync(200))
     await p
     expect(order).toEqual(['flushed', 'signOut'])
+    expect(vi.getTimerCount()).toBe(0) // the cap timer was cleared when the flush won
   })
 
   it('never blocks sign-out on a stalled flusher (4 s cap)', async () => {
