@@ -18,7 +18,7 @@ export type NewItem = { title: string; detail?: string; due_on: string | null }
 const COLS: Record<Table, string> = { roadmap_items: 'id, title, detail, due_on, done', milestones: 'id, title, due_on, done' }
 
 // Every call below resolves to { data, error } / error; none throws, so UI state can never stick on a rejected promise.
-async function safe<T>(f: () => PromiseLike<{ data?: T | null; error: Err }>): Promise<{ data: T | null; error: Err }> {
+export async function safe<T>(f: () => PromiseLike<{ data?: T | null; error: Err }>): Promise<{ data: T | null; error: Err }> {
   try {
     const r = await f()
     return { data: r.error ? null : (r.data ?? null), error: r.error ?? null }

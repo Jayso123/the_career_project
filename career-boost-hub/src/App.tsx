@@ -7,6 +7,7 @@ import NotFound from './pages/NotFound'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Dashboard from './pages/Dashboard'
+import Admin from './pages/Admin'
 import ProtectedRoute from './components/ProtectedRoute'
 import Mentors from './pages/Mentors'
 import MentorProfile from './pages/MentorProfile'
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       </AuthProvider>
