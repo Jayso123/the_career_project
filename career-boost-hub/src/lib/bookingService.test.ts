@@ -66,6 +66,11 @@ describe('runMockBooking', () => {
     expect(await runMockBooking(db, { ...ctx, plan: { ...ctx.plan, name: 'Free' } }, who)).toEqual({ ok: false, reason: 'invalid' })
     expect(calls).toEqual([])
   })
+  it.each(['constructor', 'toString', '__proto__'])('inherited plan name %s is invalid and writes nothing', async (name) => {
+    const { db, calls } = fake(ok)
+    expect(await runMockBooking(db, { ...ctx, plan: { ...ctx.plan, name } }, who)).toEqual({ ok: false, reason: 'invalid' })
+    expect(calls).toEqual([])
+  })
   it('payment insert failure cancels the session and reports error', async () => {
     const { db, calls } = fake({ ...ok, payments: { error: { code: 'x' } } })
     expect(await runMockBooking(db, ctx, who)).toEqual({ ok: false, reason: 'error' })

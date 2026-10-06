@@ -20,8 +20,8 @@ type Who = { id: string; email?: string | null; fullName?: string }
 export async function runMockBooking(db: Db, ctx: PayContext, who: Who, send = notifyOwner): Promise<Outcome> {
   const { mentor, plan, startsAt, requirements = '', phone = '' } = ctx
   // price comes from a trusted table: router state is user-editable
-  const amount = PLAN_PRICES[plan?.name]
-  if (!startsAt || !amount) return { ok: false, reason: 'invalid' }
+  const amount = Object.hasOwn(PLAN_PRICES, plan?.name) ? PLAN_PRICES[plan.name] : undefined
+  if (!startsAt || typeof amount !== 'number') return { ok: false, reason: 'invalid' }
   let sessionId: string | undefined
   try {
     const m = await db.from('mentors').select('id, name').eq('name', mentor.name).maybeSingle()
