@@ -81,7 +81,7 @@ An email is sent when a student completes Pay on `/payment` and when the contact
 - The EmailJS public key ships in the browser bundle (that is how EmailJS works); restrict the template/domain in the EmailJS dashboard to limit abuse.
 - Testimonial photos on the home page load from remote Unsplash URLs, as on the original site.
 - `index.html` has no `og:image` / `twitter:image` (the original pointed at lovable.dev). Add your own absolute-URL social image in `index.html`.
-- Leads check constraints (0003) are `NOT VALID`: they apply to new rows only. The phone check allows digits, spaces and `+ ( ) -` only.
+- The leads email check (0003) is `NOT VALID`: they apply to new rows only. Phone is free text (length cap only); the admin UI renders only sanitised tel:/mailto: links and the CSV export guards against formulas.
 - Dashboard deletes are immediate (no undo); sessions that are in the past but still `booked` are not auto-completed.
 
 ## Fidelity note
