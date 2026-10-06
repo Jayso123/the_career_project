@@ -81,7 +81,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
   const signOut = useCallback(async (): Promise<Result> => {
     if (!supabase) return NOT_CONFIGURED
-    await Promise.allSettled([...beforeSignOut.current].map(async (f) => f())) // flush while the session is still valid (RLS)
+    // flush while the session is still valid (RLS), but never block sign-out on a stalled request
+    const flushed = Promise.allSettled([...beforeSignOut.current].map(async (f) => f()))
+    let cap: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([flushed, new Promise((r) => { cap = setTimeout(r, 4000) })])
+    clearTimeout(cap)
     const { error } = await supabase.auth.signOut()
     return { error: error?.message ?? null }
   }, [])

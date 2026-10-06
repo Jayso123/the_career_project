@@ -14,6 +14,7 @@ const NEW = '2026-01-01T00:00:00.000Z'
 function fakeDb() {
   const rows = new Map<string, { data: ResumeData; updated_at: string }>()
   const upserts: { uid: string; summary: string }[] = []
+  const order: string[] = []
   const state = { sessionAlive: true, readFails: 0, gate: null as Promise<void> | null, upsertFails: false }
   const db = {
     from: () => ({
@@ -29,12 +30,13 @@ function fakeDb() {
       upsert: async (row: { student_id: string; data: ResumeData; updated_at: string }) => {
         if (!state.sessionAlive || state.upsertFails) return { error: { message: 'rls' } }
         upserts.push({ uid: row.student_id, summary: row.data.summary })
+        order.push('upsert')
         rows.set(row.student_id, { data: row.data, updated_at: row.updated_at })
         return { error: null }
       },
     }),
   }
-  return { db: db as never, rows, upserts, state }
+  return { db: db as never, rows, upserts, state, order }
 }
 
 function setup(initial: { uid: string | null; authLoading?: boolean }, f = fakeDb(), strict = true) {
@@ -46,7 +48,7 @@ function setup(initial: { uid: string | null; authLoading?: boolean }, f = fakeD
     (p: { uid: string | null; authLoading?: boolean }) => useResumeSync({ uid: p.uid, authLoading: !!p.authLoading, db: f.db, onBeforeSignOut, onFailure }),
     { initialProps: initial, wrapper },
   )
-  const order: string[] = []
+  const order = f.order
   const signOut = async () => {
     await Promise.allSettled([...callbacks].map(async (cb) => cb()))
     order.push('dropped')
@@ -127,7 +129,7 @@ describe('useResumeSync', () => {
     await act(() => t.signOut())
     await tick(2000)
     expect(t.upserts).toEqual([{ uid: 'u1', summary: 'last words' }])
-    expect(t.order).toEqual(['dropped']) // upsert happened while sessionAlive (else it would have failed)
+    expect(t.order).toEqual(['upsert', 'dropped']) // the upsert really happened before the session dropped
     expect(localStorage.getItem(keyFor('u1'))).toBeNull()
     expect(t.hook.result.current.data.summary).toBe('')
   })
@@ -201,5 +203,66 @@ describe('useResumeSync', () => {
     await tick(2000)
     expect(f.upserts).toEqual([{ uid: 'u1', summary: 'A-data' }, { uid: 'u2', summary: 'B-data' }])
     expect(loadLocal('u2')?.data.summary).toBe('B-data')
+  })
+
+  it('OPEN1(i): an edit while the read is in flight is rejected; nothing stale is written or uploaded', async () => {
+    const f = fakeDb()
+    f.rows.set('u1', { data: resume('acct'), updated_at: OLD })
+    let release!: () => void
+    f.state.gate = new Promise((r) => { release = r })
+    const t = setup({ uid: 'u1' }, f)
+    await tick(300)
+    await act(() => t.hook.result.current.set((d) => ({ ...d, template: 'modern' })))
+    release()
+    await tick(2000)
+    expect(f.upserts).toEqual([])
+    expect(t.hook.result.current.data).toMatchObject({ summary: 'acct', template: 'classic' })
+    expect(loadLocal('u1')).toMatchObject({ updatedAt: OLD, data: { summary: 'acct' } })
+  })
+
+  it('OPEN1(ii): read resolves first, then timers advance: no stale pending write survives the load', async () => {
+    const f = fakeDb()
+    f.rows.set('u1', { data: resume('acct'), updated_at: OLD })
+    let release!: () => void
+    f.state.gate = new Promise((r) => { release = r })
+    const t = setup({ uid: 'u1' }, f)
+    await tick(100)
+    await act(() => t.hook.result.current.set((d) => ({ ...d, template: 'modern' })))
+    release()
+    await tick(0) // load applied, 200 ms timer would not have fired yet
+    expect(t.hook.result.current.data.template).toBe('classic')
+    await tick(2000)
+    expect(f.upserts).toEqual([])
+    expect(loadLocal('u1')).toMatchObject({ updatedAt: OLD, data: { summary: 'acct', template: 'classic' } })
+  })
+
+  it('OPEN1(iii): edits are accepted again once ready, and in the failed state', async () => {
+    const f = fakeDb()
+    const t = setup({ uid: 'u1' }, f)
+    await tick(2000)
+    await edit(t, 'ready edit')
+    await tick(2000)
+    expect(f.upserts).toEqual([{ uid: 'u1', summary: 'ready edit' }])
+    cleanup(); localStorage.clear()
+    const g = fakeDb()
+    g.state.readFails = 1
+    const u = setup({ uid: 'u1' }, g)
+    await tick(2000)
+    expect(u.hook.result.current.sync).toBe('failed')
+    await edit(u, 'offline edit')
+    await tick(500)
+    expect(loadLocal('u1')?.data.summary).toBe('offline edit')
+    expect(g.upserts).toEqual([])
+  })
+
+  it('direct A->B switch: A flush failure does not toast B', async () => {
+    const f = fakeDb()
+    const t = setup({ uid: 'u1' }, f)
+    await tick(2000)
+    await edit(t, 'A-data')
+    f.state.upsertFails = true
+    t.hook.rerender({ uid: 'u2' })
+    await tick(2000)
+    expect(t.onFailure).not.toHaveBeenCalled()
   })
 })

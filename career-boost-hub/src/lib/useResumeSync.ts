@@ -28,6 +28,7 @@ export function useResumeSync({ uid, authLoading, db, onBeforeSignOut, onFailure
   const dirty = useRef(false) // set only by user edits
   const pending = useRef<{ uid: string | null; data: ResumeData; at: string } | null>(null)
   const localTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const ready = useRef(false) // false while the saved copy is unknown: an edit now would be stamped newer than the account row and overwrite it
   const lastFlush = useRef<Promise<boolean> | null>(null)
   const failure = useRef(onFailure)
   failure.current = onFailure
@@ -37,14 +38,25 @@ export function useResumeSync({ uid, authLoading, db, onBeforeSignOut, onFailure
     if (pending.current) saveLocal(pending.current.uid, pending.current.data, pending.current.at)
     pending.current = null
   }, [])
-  const load = (d: ResumeData) => { dirty.current = false; setData(d); setRev((r) => r + 1) }
-  const set = useCallback((f: (d: ResumeData) => ResumeData) => { dirty.current = true; setData(f) }, [])
+  const load = (d: ResumeData) => {
+    // a load replaces the state: no write queued for the previous state may survive it (owner changes flush in cleanup first)
+    clearTimeout(localTimer.current)
+    pending.current = null
+    dirty.current = false
+    setData(d)
+    setRev((r) => r + 1)
+  }
+  const set = useCallback((f: (d: ResumeData) => ResumeData) => {
+    if (!ready.current) return
+    dirty.current = true
+    setData(f)
+  }, [])
   const reset = useCallback(() => { set(() => emptyResume()); setRev((r) => r + 1) }, [set])
   const retry = useCallback(() => setAttempt((n) => n + 1), [])
 
   // Owner switch + initial load. Cleanup FLUSHES (never cancels) the previous owner's pending writes.
   useEffect(() => {
-    if (authLoading) { setSync('loading'); return }
+    if (authLoading) { ready.current = false; setSync('loading'); return }
     const prev = owner.current
     if (typeof prev === 'string' && prev !== uid) {
       // sign-out or direct account switch: drop the previous owner's local copy, but only once their data is safely upstream
@@ -54,13 +66,14 @@ export function useResumeSync({ uid, authLoading, db, onBeforeSignOut, onFailure
     lastFlush.current = null
     owner.current = uid
     setStatus('idle')
+    ready.current = false
     load(loadLocal(uid)?.data ?? emptyResume())
-    if (!uid || !db) { setSync('ready'); return }
+    if (!uid || !db) { ready.current = true; setSync('ready'); return }
     setSync('loading')
     let live = true
     void loadRemote(db, uid).then((remote) => {
       if (!live) return
-      if (remote === undefined) { setSync('failed'); return } // keep the local draft; auto-save stays off so the DB row can't be overwritten
+      if (remote === undefined) { ready.current = true; setSync('failed'); return } // keep the local draft; auto-save stays off so the DB row can't be overwritten
       const own = loadLocal(uid)
       const anon = loadLocal(null)
       removeLocal(null) // the pre-login draft belongs to the first account that loads; never left for the next one
@@ -70,8 +83,9 @@ export function useResumeSync({ uid, authLoading, db, onBeforeSignOut, onFailure
         load(pick.data)
         saveLocal(uid, pick.data, pick.updatedAt)
       }
-      saver.current = createSaver(db, uid, { onStatus: (s) => live && setStatus(s), onFailure: () => failure.current() })
+      saver.current = createSaver(db, uid, { onStatus: (s) => live && setStatus(s), onFailure: () => { if (owner.current === uid) failure.current() } }) // a flush for a previous owner must not toast the new one
       if (pick?.source === 'local') saver.current.save(pick.data)
+      ready.current = true
       setSync('ready')
     })
     return () => {

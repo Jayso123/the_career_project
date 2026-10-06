@@ -89,7 +89,7 @@ export default function ResumeBuilder() {
           <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 shadow-sm">
             <div role="group" aria-label="Template" className="inline-flex rounded-lg border p-0.5">
               {(['classic', 'modern'] as const).map((t) => (
-                <button key={t} type="button" aria-pressed={data.template === t} onClick={() => set((d) => ({ ...d, template: t }))}
+                <button key={t} type="button" disabled={sync === 'loading'} aria-pressed={data.template === t} onClick={() => set((d) => ({ ...d, template: t }))}
                   className={cn('rounded-md px-3 py-1.5 text-sm font-medium capitalize', data.template === t ? 'bg-accent text-accent-foreground' : 'text-foreground hover:bg-accent/10')}>
                   {t}
                 </button>
