@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #2563eb;
+  --color-brand-dark: #1d4ed8;
+  --color-accent: #14b8a6;
+  --color-ink: #0f172a;
+  --color-soft: #f1f5f9;
+}
+
+html { scroll-behavior: smooth; }
+body { font-family: system-ui, sans-serif; color: var(--color-ink); }
+section[id] { scroll-margin-top: 5rem; }
