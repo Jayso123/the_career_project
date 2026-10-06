@@ -5,8 +5,11 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Textarea } from '../ui/textarea'
 import { useToast } from '../ui/use-toast'
+import { supabase } from '../../lib/supabase'
+import { notifyOwner } from '../../lib/notify'
+import { leadFromContact } from '../../lib/leadFromContact'
 
-// Live site: no validation beyond HTML `required`; submit just waits 1s and toasts. contactSchema/persistence arrive in Task 9.
+// Live site: no validation beyond HTML `required`. Saves a lead (when Supabase is configured) and emails the owner.
 export default function Contact() {
   const { toast } = useToast()
   const [form, setForm] = useState({ name: '', email: '', phone: '', message: '' })
@@ -19,8 +22,19 @@ export default function Contact() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (loading) return
     setLoading(true)
-    await new Promise((r) => setTimeout(r, 1000))
+    const lead = leadFromContact(form)
+    if (supabase) {
+      const { error } = await supabase.from('leads').insert(lead) // no .select(): anon has no SELECT policy
+      if (error) {
+        console.error('lead insert failed', error)
+        toast({ title: 'Something went wrong', description: 'Please try again or email us directly.', variant: 'destructive' })
+        setLoading(false)
+        return
+      }
+      await notifyOwner({ kind: 'contact', name: lead.name, email: lead.email, phone: lead.phone, requirements: lead.goals })
+    }
     toast({ title: 'Message Sent! 🎉', description: "We'll get back to you within 24 hours." })
     setForm({ name: '', email: '', phone: '', message: '' })
     setLoading(false)
