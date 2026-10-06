@@ -24,20 +24,21 @@ export default function Contact() {
     e.preventDefault()
     if (loading) return
     setLoading(true)
-    const lead = leadFromContact(form)
-    if (supabase) {
-      const { error } = await supabase.from('leads').insert(lead) // no .select(): anon has no SELECT policy
-      if (error) {
-        console.error('lead insert failed', error)
-        toast({ title: 'Something went wrong', description: 'Please try again or email us directly.', variant: 'destructive' })
-        setLoading(false)
-        return
+    try {
+      const lead = leadFromContact(form)
+      if (supabase) {
+        const { error } = await supabase.from('leads').insert(lead) // no .select(): anon has no SELECT policy
+        if (error) throw error
       }
       await notifyOwner({ kind: 'contact', name: lead.name, email: lead.email, phone: lead.phone, requirements: lead.goals })
+      toast({ title: 'Message Sent! 🎉', description: "We'll get back to you within 24 hours." })
+      setForm({ name: '', email: '', phone: '', message: '' })
+    } catch (err) {
+      console.error('lead insert failed', err)
+      toast({ title: 'Something went wrong', description: 'Please try again or email us directly.', variant: 'destructive' })
+    } finally {
+      setLoading(false)
     }
-    toast({ title: 'Message Sent! 🎉', description: "We'll get back to you within 24 hours." })
-    setForm({ name: '', email: '', phone: '', message: '' })
-    setLoading(false)
   }
 
   const linkClass = 'flex items-start gap-4 group cursor-pointer hover:bg-accent/5 p-2 -m-2 rounded-xl transition-colors'
