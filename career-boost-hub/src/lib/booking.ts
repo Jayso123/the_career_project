@@ -1,3 +1,5 @@
+import { phoneRe } from './contactSchema'
+
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** Picked local calendar day + "09:00 AM" label, interpreted as IST, as a UTC ISO string. */
@@ -17,3 +19,9 @@ export const isUniqueViolation = (e: unknown): boolean => (e as { code?: string 
 export const mockReference = (): string => 'MOCK-' + crypto.randomUUID().slice(0, 8)
 
 export const formatSlot = (date: string, time: string): string => `${date}, ${time} IST`
+
+export const isValidPhone = (p: string): boolean => {
+  const v = p.trim()
+  const digits = v.replace(/\D/g, '').length
+  return phoneRe.test(v) && digits >= 8 && digits <= 15
+}

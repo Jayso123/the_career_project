@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import PageWrapper from '../components/clone/PageWrapper'
 import ScrollProgress from '../components/clone/ScrollProgress'
 import Navbar from '../components/clone/Navbar'
@@ -12,6 +14,10 @@ import Contact from '../components/clone/Contact'
 import Footer from '../components/clone/Footer'
 
 export default function Index() {
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash) document.querySelector(hash)?.scrollIntoView()
+  }, [hash])
   return (
     <PageWrapper>
       <ScrollProgress />

@@ -6,7 +6,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import { env } from '../lib/env'
-import { phoneRe } from '../lib/contactSchema'
+import { isValidPhone } from '../lib/booking'
 import { useToast } from '../components/ui/use-toast'
 
 export interface PaymentState {
@@ -64,7 +64,7 @@ export function PaymentView({ state, onPay }: { state: PaymentState; onPay?: OnP
   const scriptLoaded = mock || razorpayLoaded
   const [phone, setPhone] = useState(state.phone ?? '')
   const [requirements, setRequirements] = useState(state.requirements ?? '')
-  const phoneError = phoneRe.test(phone.trim()) ? '' : 'Enter a valid phone number (8-15 digits)'
+  const phoneError = isValidPhone(phone) ? '' : 'Enter a valid phone number (8-15 digits)'
   const reqLen = requirements.trim().length
   const reqError = reqLen < 10 ? 'Tell us what you need help with (at least 10 characters)' : reqLen > 1000 ? 'Keep it under 1000 characters' : ''
   const invalid = !!(phoneError || reqError)

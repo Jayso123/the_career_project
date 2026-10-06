@@ -8,20 +8,31 @@ import { BookLink, MentorShell, type Mentor } from './Mentors'
 export default function MentorProfile() {
   const { id } = useParams()
   const [mentor, setMentor] = useState<Mentor | null | undefined>(undefined) // undefined = loading
+  const [error, setError] = useState(false)
   useEffect(() => {
     if (!supabase || !id) return
+    let live = true
     supabase
       .from('mentors')
       .select('id, name, title, company, bio')
       .eq('id', id)
       .maybeSingle()
-      .then(({ data }) => setMentor((data as Mentor | null) ?? null))
+      .then(({ data, error: err }) => {
+        if (!live) return
+        if (err) setError(true)
+        else setMentor((data as Mentor | null) ?? null)
+      })
+    return () => {
+      live = false
+    }
   }, [id])
 
   return (
     <MentorShell>
       {!supabase ? (
         <ConnectSupabase />
+      ) : error ? (
+        <p role="alert" className="text-destructive">Could not load this mentor. Please try again later.</p>
       ) : mentor === undefined ? (
         <Loader2 className="w-8 h-8 animate-spin text-accent" aria-label="Loading" />
       ) : mentor === null ? (

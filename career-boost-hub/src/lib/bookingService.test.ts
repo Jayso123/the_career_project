@@ -52,11 +52,33 @@ describe('runMockBooking', () => {
   it('other session insert error -> error', async () => {
     expect(await runMockBooking(fake({ ...ok, sessions: { error: { code: '42501' } } }).db, ctx, who)).toEqual({ ok: false, reason: 'error' })
   })
-  it('payment failure after session insert -> partial', async () => {
-    expect(await runMockBooking(fake({ ...ok, payments: { error: { code: 'x' } } }).db, ctx, who)).toEqual({ ok: false, reason: 'partial' })
-  })
   it('email failure does not fail the booking', async () => {
     const out = await runMockBooking(fake(ok).db, ctx, who, vi.fn().mockResolvedValue(false))
+    expect(out.ok).toBe(true)
+  })
+  it('uses the trusted plan price, not the editable state price', async () => {
+    const { db, calls } = fake(ok)
+    await runMockBooking(db, { ...ctx, plan: { ...ctx.plan, name: 'Premium', price: '₹1' }, amount: 1 }, who, vi.fn())
+    expect(calls.find((c) => c[0] === 'payments')?.[2]).toMatchObject({ amount_inr: 1199 })
+  })
+  it('unknown plan is invalid and writes nothing', async () => {
+    const { db, calls } = fake(ok)
+    expect(await runMockBooking(db, { ...ctx, plan: { ...ctx.plan, name: 'Free' } }, who)).toEqual({ ok: false, reason: 'invalid' })
+    expect(calls).toEqual([])
+  })
+  it('payment insert failure cancels the session and reports error', async () => {
+    const { db, calls } = fake({ ...ok, payments: { error: { code: 'x' } } })
+    expect(await runMockBooking(db, ctx, who)).toEqual({ ok: false, reason: 'error' })
+    expect(calls.find((c) => c[0] === 'sessions' && c[1] === 'update')?.[2]).toEqual({ status: 'cancelled' })
+  })
+  it('payment_id link failure -> partial', async () => {
+    const { db } = fake({ ...ok, sessions: { data: { id: 's1' }, ...{} } })
+    // make only the update fail: wrap from() so the sessions update resolves with an error
+    const wrapped = { from: (t: string) => { const c = (db as any).from(t); if (t === 'sessions') { const u = c.update; c.update = (v: any) => { const r = u(v); if (v.payment_id) r.then = (f: any) => Promise.resolve({ data: null, error: { code: 'x' } }).then(f); return r }; } return c } }
+    expect(await runMockBooking(wrapped as never, ctx, who, vi.fn())).toEqual({ ok: false, reason: 'partial' })
+  })
+  it('a throwing sender never fails the booking', async () => {
+    const out = await runMockBooking(fake(ok).db, ctx, who, vi.fn().mockRejectedValue(new Error('boom')))
     expect(out.ok).toBe(true)
   })
   it('missing startsAt is invalid', async () => {

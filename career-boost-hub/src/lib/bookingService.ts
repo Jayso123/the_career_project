@@ -11,13 +11,17 @@ export type Outcome =
   | { ok: true; paymentId: string }
   | { ok: false; reason: 'mentor' | 'taken' | 'invalid' | 'error' | 'partial' }
 
+const PLAN_PRICES: Record<string, number> = { Basic: 299, Standard: 699, Premium: 1199 }
+
 type Db = Pick<SupabaseClient, 'from'>
 type Who = { id: string; email?: string | null; fullName?: string }
 
 /** Mock booking: session row -> payment row -> link -> owner email. Never throws. */
 export async function runMockBooking(db: Db, ctx: PayContext, who: Who, send = notifyOwner): Promise<Outcome> {
   const { mentor, plan, startsAt, requirements = '', phone = '' } = ctx
-  if (!startsAt) return { ok: false, reason: 'invalid' }
+  // price comes from a trusted table: router state is user-editable
+  const amount = PLAN_PRICES[plan?.name]
+  if (!startsAt || !amount) return { ok: false, reason: 'invalid' }
   let sessionId: string | undefined
   try {
     const m = await db.from('mentors').select('id, name').eq('name', mentor.name).maybeSingle()
@@ -32,23 +36,31 @@ export async function runMockBooking(db: Db, ctx: PayContext, who: Who, send = n
     const reference = mockReference()
     const p = await db
       .from('payments')
-      .insert({ session_id: sessionId, student_id: who.id, amount_inr: ctx.amount, mode: 'mock', status: 'paid', reference })
+      .insert({ session_id: sessionId, student_id: who.id, amount_inr: amount, mode: 'mock', status: 'paid', reference })
       .select('id')
       .single()
-    if (p.error) throw p.error
+    if (p.error) {
+      // no payment recorded: release the slot so the user can retry cleanly
+      await db.from('sessions').update({ status: 'cancelled' }).eq('id', sessionId)
+      return { ok: false, reason: 'error' }
+    }
     const u = await db.from('sessions').update({ payment_id: p.data.id }).eq('id', sessionId)
     if (u.error) throw u.error
     // email is best effort: result never affects the booking
-    await send({
-      kind: 'booking',
-      name: who.fullName || who.email || '',
-      email: who.email ?? '',
-      phone,
-      requirements,
-      mentor: mentor.name,
-      plan: plan.name,
-      slot: formatSlot(ctx.date, ctx.time),
-    })
+    try {
+      await send({
+        kind: 'booking',
+        name: who.fullName || who.email || '',
+        email: who.email ?? '',
+        phone,
+        requirements,
+        mentor: mentor.name,
+        plan: plan.name,
+        slot: formatSlot(ctx.date, ctx.time),
+      })
+    } catch (e) {
+      console.error('owner email failed', e)
+    }
     return { ok: true, paymentId: reference }
   } catch (e) {
     console.error('booking failed', e)
@@ -59,7 +71,7 @@ export async function runMockBooking(db: Db, ctx: PayContext, who: Who, send = n
 const MESSAGES = {
   mentor: 'Mentor not found',
   taken: 'That slot was just taken',
-  invalid: 'Booking details are incomplete. Please pick a slot again.',
+  invalid: 'Invalid booking details. Please pick a slot again.',
   error: 'Booking failed. Please try again.',
   partial: 'Your booking was saved, but recording the payment failed. Please contact support before paying again.',
 }
@@ -83,7 +95,7 @@ export function useMockPay(): OnPay {
     }
     const out = await runMockBooking(supabase, ctx, { id: user.id, email: user.email, fullName: profile?.full_name })
     if (out.ok) return { paymentId: out.paymentId }
-    if (out.reason === 'taken') navigate(-1)
+    if (out.reason === 'taken') navigate('/#pricing')
     return fail(MESSAGES[out.reason])
   }
 }

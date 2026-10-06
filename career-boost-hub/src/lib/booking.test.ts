@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatSlot, isUniqueViolation, mockReference, toStartsAtIso } from './booking'
+import { formatSlot, isValidPhone, isUniqueViolation, mockReference, toStartsAtIso } from './booking'
 
 const day = new Date(2026, 9, 6) // local calendar day 2026-10-06
 
@@ -29,4 +29,12 @@ describe('mockReference', () => {
 
 describe('formatSlot', () => {
   it('is human readable with IST', () => expect(formatSlot('October 6th, 2026', '09:00 AM')).toBe('October 6th, 2026, 09:00 AM IST'))
+})
+
+describe('isValidPhone', () => {
+  it('needs 8-15 real digits', () => {
+    expect(isValidPhone('+91 98765 43210')).toBe(true)
+    expect(isValidPhone('1-------')).toBe(false)
+    expect(isValidPhone('1234567')).toBe(false)
+  })
 })
