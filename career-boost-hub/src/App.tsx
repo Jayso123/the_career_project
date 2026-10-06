@@ -42,35 +42,35 @@ export default function App() {
         }}
       />
       <BrowserRouter>
-      <AuthProvider>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/payment" element={<PaymentRoute />} />
-        <Route path="/mentors" element={<Mentors />} />
-        <Route path="/mentors/:id" element={<MentorProfile />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
-        <Route
-          path="/ats-checker"
-          element={
-            <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" aria-label="Loading" /></div>}>
-              <AtsChecker />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/resume-builder"
-          element={
-            <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" aria-label="Loading" /></div>}>
-              <ResumeBuilder />
-            </Suspense>
-          }
-        />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-      </AuthProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/payment" element={<PaymentRoute />} />
+            <Route path="/mentors" element={<Mentors />} />
+            <Route path="/mentors/:id" element={<MentorProfile />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute role="admin"><Admin /></ProtectedRoute>} />
+            <Route
+              path="/ats-checker"
+              element={
+                <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" aria-label="Loading" /></div>}>
+                  <AtsChecker />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/resume-builder"
+              element={
+                <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-accent" aria-label="Loading" /></div>}>
+                  <ResumeBuilder />
+                </Suspense>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </>
   )

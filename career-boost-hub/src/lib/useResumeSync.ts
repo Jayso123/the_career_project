@@ -83,11 +83,13 @@ export function useResumeSync({ uid, authLoading, db, onBeforeSignOut, onFailure
         load(pick.data)
         saveLocal(uid, pick.data, pick.updatedAt)
       }
-      saver.current = createSaver(db, uid, { onStatus: (s) => live && setStatus(s), onFailure: () => {
-        if (owner.current === uid) failure.current()
-        else console.warn("resume: could not save the previous account's last edits; they are kept in this browser") // never toast the new owner
-      },
-    })
+      saver.current = createSaver(db, uid, {
+        onStatus: (s) => live && setStatus(s),
+        onFailure: () => {
+          if (owner.current === uid) failure.current()
+          else console.warn("resume: could not save the previous account's last edits; they are kept in this browser") // never toast the new owner
+        },
+      })
       if (pick?.source === 'local') saver.current.save(pick.data)
       ready.current = true
       setSync('ready')

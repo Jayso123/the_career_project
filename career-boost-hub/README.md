@@ -1,56 +1,89 @@
-# React + TypeScript + Vite
+# Career Boost Hub
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Career mentorship site for students: an exact clone of the original landing page (hero, career paths, journey, pricing, testimonials, contact), extended with accounts, a mock-payment booking flow that emails the owner, a mentor directory, a student dashboard, an admin console, an ATS resume checker and a resume builder.
 
-Currently, two official plugins are available:
+## Routes
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Route | What it does |
+| --- | --- |
+| `/` | Landing page. The Pricing modal (date, time, mentor, plan) is the booking flow and ends on `/payment`. The contact form stores a lead and emails the owner. |
+| `/payment` | Booking summary + phone and requirements (both required before Pay). Login required to pay. In mock mode shows a "Demo payment" banner and records the session and payment in Supabase. |
+| `/login`, `/signup` | Supabase email/password auth. |
+| `/mentors`, `/mentors/:id` | Mentor list and profile (read from Supabase). Book buttons link to `/#pricing`. |
+| `/dashboard` | Student only: booked sessions, roadmap, interview-prep milestones. |
+| `/admin` | Admin only: bookings, leads (CSV export), mentors. |
+| `/ats-checker` | Paste or upload (.txt, .docx, .pdf) a resume and a job description for a keyword + formatting score. Runs fully in the browser. |
+| `/resume-builder` | Classic/Modern templates, live preview, Download PDF (browser print), draft saved locally and synced to your account when logged in. |
 
-## React Compiler
+`/ats-checker` and `/resume-builder` work with no backend. Everything else that stores data needs Supabase (without keys the app still runs and shows "not configured" messages).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Stack
 
-## Expanding the Oxlint configuration
+Vite, React 19, TypeScript, Tailwind CSS, Radix UI, framer-motion + GSAP, react-router, Supabase (auth + Postgres + RLS), EmailJS (owner notifications), mammoth and pdfjs-dist (resume file parsing), vitest.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Run it
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+npm i
+cp .env.example .env     # fill in the values, see below
+npm run dev              # http://localhost:5173
+npm test                 # unit tests (vitest)
+npm run build            # tsc -b && vite build
+npm run lint             # oxlint
+node scripts/shotdiff.mjs  # pixel diff of the home page vs the live original (dev server must be running)
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Environment variables (`.env`)
 
-## Database
+| Variable | Where to find it |
+| --- | --- |
+| `VITE_SUPABASE_URL` | Supabase dashboard, Project Settings > API > Project URL |
+| `VITE_SUPABASE_ANON_KEY` | Same page, `anon` `public` key. Never use the `service_role` key. |
+| `VITE_PAYMENT_MODE` | `mock` (default when unset). Real Razorpay is not implemented, see below. |
+| `VITE_EMAILJS_SERVICE_ID` | emailjs.com > Email Services > your service ID |
+| `VITE_EMAILJS_TEMPLATE_ID` | emailjs.com > Email Templates > your template ID |
+| `VITE_EMAILJS_PUBLIC_KEY` | emailjs.com > Account > General > Public Key |
+| `VITE_OWNER_EMAIL` | Your inbox: where booking and contact notifications are sent |
 
-Run `supabase/migrations/0001_init.sql` in the Supabase SQL editor. Admins cannot change roles via the API; promote one with `update public.profiles set role='admin' where id='<uid>'` in the SQL editor. Insert leads without `.select()` (anon cannot read them back).
+Restart `npm run dev` after editing `.env`. Do not commit `.env`.
+
+## Supabase setup
+
+1. Create a project, copy the URL and anon key into `.env`.
+2. In the Supabase SQL editor run, in this order: `supabase/migrations/0001_init.sql`, `0002_session_guard.sql`, `0003_hardening.sql`, then `supabase/seed.sql` (the 5 mentors). 0001 and 0002 are run-once; 0003 is idempotent.
+3. Sign up in the app, then promote yourself to admin in the SQL editor:
+   ```sql
+   update public.profiles set role='admin' where id='<your user uid>';
+   ```
+   (Find the uid under Authentication > Users.) Roles cannot be changed through the API by design.
+4. If email confirmation is on, confirm the address before logging in (or turn it off for local testing).
 
 ## EmailJS setup
 
-To enable owner notification emails:
+1. Add an email service (e.g. Gmail) and note its Service ID.
+2. Create a template with these variables: `{{to_email}}`, `{{reply_to}}`, `{{subject}}`, `{{message}}`. Set the template's **To email** field to `{{to_email}}`, Reply-To to `{{reply_to}}`, Subject to `{{subject}}`, and put `{{message}}` in the body.
+3. Put the service ID, template ID and public key in `.env`, and your inbox in `VITE_OWNER_EMAIL`.
 
-1. Create an [EmailJS](https://www.emailjs.com) service
-2. Create a template with template fields `{{to_email}}`, `{{reply_to}}`, `{{subject}}`, and `{{message}}`
-   - The template's "To email" field must be set to `{{to_email}}`
-3. Fill the following environment variables in `.env`:
-   - `VITE_EMAILJS_SERVICE_ID` – your EmailJS service ID
-   - `VITE_EMAILJS_TEMPLATE_ID` – your EmailJS template ID
-   - `VITE_EMAILJS_PUBLIC_KEY` – your EmailJS public key
-   - `VITE_OWNER_EMAIL` – the owner's email address (recipient of notifications)
-4. Restart the dev server after editing `.env`
+An email is sent when a student completes Pay on `/payment` and when the contact form is submitted. Email is best effort: the database row is the source of truth and a failed email never blocks a booking.
 
-## Booking flow
+## Mock payment, and what must change before real Razorpay
 
-Pricing modal (mentor, date, time, plan) -> `/payment` -> Phone + Requirements -> **Pay**. A signed-in student is required; guests are sent to `/login` and returned to `/payment` with their details intact. On Pay (mock mode, `VITE_PAYMENT_MODE=mock`): the mentor is looked up by name, a `sessions` row is inserted (a double booking of the same mentor + time is rejected as "That slot was just taken"), a `payments` row is recorded with `mode='mock'` and a `MOCK-` reference, the session is linked to it, and the owner gets a booking email (best effort; it never fails the booking). Mock mode shows "Demo payment — no money is charged" and never loads Razorpay.
+`/payment` currently runs a mock: Pay writes a `sessions` row and a `payments` row (mode `mock`, reference `MOCK-...`) from the browser. This is fine for a demo but not for real money. Before enabling Razorpay:
 
-Database setup, in the Supabase SQL editor, in order: `supabase/migrations/0001_init.sql` -> `supabase/migrations/0002_session_guard.sql` -> `supabase/seed.sql` (adds the 5 mentors the booking modal uses).
+- Move payment and session creation server-side (an edge function / backend using the service role); the browser must not be able to write payments.
+- Tighten or remove the `payments_insert` policy: today a student can insert their own payment with `status='paid'`.
+- Validate `sessions.payment_id` against a verified payment belonging to that student (FK/trigger); it is only checked as "set once" today.
+- Compute the amount from a trusted server-side plan table, never from client state.
+
+## Known limitations
+
+- Admin lists are not paginated; beyond Supabase's 1000-row response cap, bookings, leads and CSV export would be truncated.
+- The EmailJS public key ships in the browser bundle (that is how EmailJS works); restrict the template/domain in the EmailJS dashboard to limit abuse.
+- Testimonial photos on the home page load from remote Unsplash URLs, as on the original site.
+- `index.html` has no `og:image` / `twitter:image` (the original pointed at lovable.dev). Add your own absolute-URL social image in `index.html`.
+- Leads check constraints (0003) are `NOT VALID`: they apply to new rows only. The phone check allows digits, spaces and `+ ( ) -` only.
+- Dashboard deletes are immediate (no undo); sessions that are in the past but still `booked` are not auto-completed.
+
+## Fidelity note
+
+The landing page is an exact clone of the original, measured section by section with `node scripts/shotdiff.mjs` at 1280px and 375px (pixelmatch threshold 0.1, `includeAA: false` so anti-aliased pixels are not counted, target under 0.5% per section). Each capture is re-taken until it is stable, so animations cannot cause false failures. The only intended visual difference is the navbar **Login** button, which the script hides on the local page.
