@@ -16,6 +16,24 @@ describe('safeUrl', () => {
   ])('%s -> %s', (i, o) => expect(safeUrl(i)).toBe(o))
 })
 
+describe('hardening', () => {
+  it.each([
+    ['java\nscript:alert(1)', null],
+    ['\tjavascript:alert(1)', null],
+    ['https://u:p@h.com', null],
+    ['https://good.com@evil.com', null],
+    ['https:evil.com', null],
+    ['example.com:8080/x', 'https://example.com:8080/x'],
+    ['https://a.b/' + 'x'.repeat(2100), null],
+  ])('safeUrl %s', (i, o) => expect(safeUrl(i)).toBe(o))
+  it('dedupes duplicate ids', () => {
+    const r = normalizeResume({ education: [{ id: 'a', degree: 'x' }, { id: 'a', degree: 'y' }], projects: [{ id: 'a', name: 'p' }] })
+    const ids = [...r.education.map((e) => e.id), ...r.projects.map((e) => e.id)]
+    expect(new Set(ids).size).toBe(3)
+    expect(r.education[0].id).toBe('a')
+  })
+})
+
 describe('normalizeResume', () => {
   it('defaults for junk', () => {
     for (const j of [null, undefined, 'x', 5, [], [1], true]) {

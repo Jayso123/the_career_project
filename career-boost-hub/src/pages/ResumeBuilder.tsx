@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Download, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { ChevronDown, Download, Loader2, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import Navbar from '../components/clone/Navbar'
 import ResumePreview from '../components/ResumePreview'
 import { Button } from '../components/ui/button'
@@ -9,7 +9,7 @@ import { Textarea } from '../components/ui/textarea'
 import { toast } from '../components/ui/use-toast'
 import { useAuth } from '../context/AuthContext'
 import { LIMITS, emptyResume, newId, type ResumeData } from '../lib/resumeModel'
-import { createSaver, loadLocal, loadRemote, saveLocal, type SaveStatus } from '../lib/resumeStorage'
+import { adoptAnon, createSaver, loadLocal, loadRemote, pickResume, removeLocal, saveLocal, type SaveStatus } from '../lib/resumeStorage'
 import { supabase } from '../lib/supabase'
 import { cn } from '../lib/utils'
 import '../styles/print.css'
@@ -50,54 +50,94 @@ const RowCard = ({ children, onRemove, label }: { children: React.ReactNode; onR
 )
 
 export default function ResumeBuilder() {
-  const { user } = useAuth()
-  const uid = user?.id
-  const [data, setData] = useState<ResumeData>(() => loadLocal() ?? emptyResume())
+  const { user, loading: authLoading } = useAuth()
+  const uid = user?.id ?? null
+  const [data, setData] = useState<ResumeData>(emptyResume)
   const [status, setStatus] = useState<SaveStatus>('idle')
+  const [sync, setSync] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const [attempt, setAttempt] = useState(0)
   const [open, setOpen] = useState<Set<string>>(new Set(['personal']))
-  const [rev, setRev] = useState(0) // remounts the uncontrolled skills input after reset / remote load
+  const [rev, setRev] = useState(0) // remounts the uncontrolled skills input after reset / load
   const [confirm, setConfirm] = useState(false)
   const saver = useRef<ReturnType<typeof createSaver> | null>(null)
-  const skip = useRef(true) // don't echo a freshly loaded value back to the DB
-  const latest = useRef(data)
-  latest.current = data
+  const owner = useRef<string | null | undefined>(undefined) // whose data is in state; undefined until auth settles
+  const quiet = useRef<ResumeData | null>(null) // a programmatic load: don't persist or re-upload it
+  const pending = useRef<{ uid: string | null; data: ResumeData; at: string } | null>(null)
+  const localTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  // Signed in: load the DB row (falls back to the local draft), then enable auto-save.
-  // A failed read never enables saving, so a transient error can't overwrite the stored row.
+  const flushLocal = () => {
+    clearTimeout(localTimer.current)
+    if (pending.current) saveLocal(pending.current.uid, pending.current.data, pending.current.at)
+    pending.current = null
+  }
+  const load = (d: ResumeData) => { quiet.current = d; setData(d); setRev((r) => r + 1) }
+
+  // Owner switch + initial load. Cleanup flushes (never cancels) the previous owner's pending writes.
   useEffect(() => {
-    saver.current = null
+    if (authLoading) return
+    const prev = owner.current
+    if (typeof prev === 'string' && uid === null) removeLocal(prev) // explicit sign-out: shared-browser privacy, the DB keeps it
+    owner.current = uid
     setStatus('idle')
-    if (!uid || !supabase) return
+    const local = loadLocal(uid)
+    if (!uid || !supabase) {
+      load(local?.data ?? emptyResume())
+      setSync('ready')
+      return
+    }
+    load(local?.data ?? emptyResume())
+    setSync('loading')
     let live = true
     const db = supabase
     void loadRemote(db, uid).then((remote) => {
-      if (!live || remote === undefined) return
-      if (remote) {
-        skip.current = true
-        setData(remote)
-        setRev((r) => r + 1)
+      if (!live) return
+      if (remote === undefined) { setSync('failed'); return } // keep the local draft; auto-save stays off so the DB row can't be overwritten
+      let pick = pickResume(loadLocal(uid), remote)
+      if (!pick && !remote) {
+        const anon = adoptAnon(uid)
+        if (anon) pick = { ...anon, source: 'local' }
+      }
+      if (pick) {
+        load(pick.data)
+        if (pick.source === 'remote') saveLocal(uid, pick.data, pick.updatedAt)
       }
       saver.current = createSaver(db, uid, {
         onStatus: (s) => live && setStatus(s),
         onFailure: () => toast({ title: "Couldn't save your resume to your account", description: 'Your changes are kept in this browser.', variant: 'destructive' }),
       })
-      if (!remote) saver.current.save(latest.current) // no row yet: persist the local draft
+      if (pick?.source === 'local') saver.current.save(pick.data)
+      setSync('ready')
     })
     return () => {
       live = false
-      saver.current?.cancel()
+      flushLocal()
+      void saver.current?.flush()
       saver.current = null
     }
-  }, [uid])
+  }, [uid, authLoading, attempt])
 
+  // Edits: debounced local copy (200 ms) + debounced DB upsert.
   useEffect(() => {
-    saveLocal(data)
-    if (skip.current) {
-      skip.current = false
-      return
-    }
+    if (data === quiet.current) { quiet.current = null; return }
+    if (owner.current === undefined) return
+    pending.current = { uid: owner.current, data, at: new Date().toISOString() }
+    clearTimeout(localTimer.current)
+    localTimer.current = setTimeout(flushLocal, 200)
     saver.current?.save(data)
   }, [data])
+
+  useEffect(() => {
+    const hide = () => { flushLocal(); void saver.current?.flush() }
+    const vis = () => document.visibilityState === 'hidden' && hide()
+    window.addEventListener('pagehide', hide)
+    document.addEventListener('visibilitychange', vis)
+    return () => {
+      window.removeEventListener('pagehide', hide)
+      document.removeEventListener('visibilitychange', vis)
+    }
+  }, [])
+
+  const focusSoon = (id: string) => setTimeout(() => document.getElementById(id)?.focus(), 0)
 
   const set = (f: (d: ResumeData) => ResumeData) => setData(f)
   const toggle = (k: string) => setOpen((s) => { const n = new Set(s); if (!n.delete(k)) n.add(k); return n })
@@ -109,7 +149,8 @@ export default function ResumeBuilder() {
   const setLinks = (f: (l: string[]) => string[]) => set((d) => ({ ...d, personal: { ...d.personal, links: f(d.personal.links) } }))
 
   const statusText =
-    status === 'saving' ? 'Saving…'
+    sync === 'failed' ? 'Not syncing with your account'
+    : status === 'saving' ? 'Saving…'
     : status === 'error' ? "Couldn't save — your changes are kept in this browser"
     : status === 'saved' && uid ? ACCOUNT
     : LOCAL
@@ -133,11 +174,19 @@ export default function ResumeBuilder() {
                 </button>
               ))}
             </div>
-            <Button type="button" variant="accent" onClick={() => window.print()}><Download aria-hidden />Download PDF</Button>
-            <Button type="button" variant="outline" onClick={() => setConfirm(true)}><RotateCcw aria-hidden />Start over</Button>
-            <p role="status" aria-live="polite" className={cn('ml-auto text-sm', status === 'error' ? 'text-destructive font-medium' : 'text-muted-foreground')}>{statusText}</p>
+            <Button type="button" variant="accent" disabled={sync === 'loading'} onClick={() => window.print()}><Download aria-hidden />Download PDF</Button>
+            <Button type="button" variant="outline" disabled={sync === 'loading'} onClick={() => setConfirm(true)}><RotateCcw aria-hidden />Start over</Button>
+            <p role="status" aria-live="polite" className={cn('ml-auto flex items-center gap-2 text-sm', status === 'error' || sync === 'failed' ? 'text-destructive font-medium' : 'text-muted-foreground')}>
+              {statusText}
+              {sync === 'failed' && <Button type="button" size="sm" variant="outline" onClick={() => setAttempt((n) => n + 1)}>Retry</Button>}
+            </p>
           </div>
         </div>
+        {sync === 'loading' ? (
+          <div role="status" className="no-print flex items-center gap-2 rounded-xl border bg-card p-6 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" aria-hidden />Loading your saved resume…
+          </div>
+        ) : (
         <div className="print-grid grid gap-6 lg:grid-cols-2 items-start">
           <div className="no-print space-y-3">
             {sec('personal', 'Personal', <>
@@ -153,7 +202,7 @@ export default function ResumeBuilder() {
                   <Button type="button" variant="ghost" size="icon" aria-label={`Remove link ${i + 1}`} onClick={() => setLinks((ls) => ls.filter((_, j) => j !== i))}><Trash2 aria-hidden /></Button>
                 </div>
               ))}
-              {p.links.length < LIMITS.links && <Button type="button" variant="outline" size="sm" onClick={() => setLinks((ls) => [...ls, ''])}><Plus aria-hidden />Add link</Button>}
+              {p.links.length < LIMITS.links && <Button type="button" variant="outline" size="sm" onClick={() => { setLinks((ls) => [...ls, '']); focusSoon(`rb-link-${p.links.length}`) }}><Plus aria-hidden />Add link</Button>}
             </>)}
 
             {sec('summary', 'Summary', <>
@@ -179,10 +228,10 @@ export default function ResumeBuilder() {
                       <Button type="button" variant="ghost" size="icon" aria-label={`Remove bullet ${i + 1}`} onClick={() => upExp(e.id, (v) => ({ ...v, bullets: v.bullets.filter((_, j) => j !== i) }))}><Trash2 aria-hidden /></Button>
                     </div>
                   ))}
-                  {e.bullets.length < LIMITS.bullets && <Button type="button" variant="outline" size="sm" onClick={() => upExp(e.id, (v) => ({ ...v, bullets: [...v.bullets, ''] }))}><Plus aria-hidden />Add bullet</Button>}
+                  {e.bullets.length < LIMITS.bullets && <Button type="button" variant="outline" size="sm" onClick={() => { upExp(e.id, (v) => ({ ...v, bullets: [...v.bullets, ''] })); focusSoon(`rb-b-${e.id}-${e.bullets.length}`) }}><Plus aria-hidden />Add bullet</Button>}
                 </RowCard>
               ))}
-              {data.experience.length < LIMITS.jobs && <Button type="button" variant="outline" onClick={() => set((d) => ({ ...d, experience: [...d.experience, { id: newId(), role: '', company: '', from: '', to: '', bullets: [] }] }))}><Plus aria-hidden />Add experience</Button>}
+              {data.experience.length < LIMITS.jobs && <Button type="button" variant="outline" onClick={() => { const id = newId(); set((d) => ({ ...d, experience: [...d.experience, { id, role: '', company: '', from: '', to: '', bullets: [] }] })); focusSoon(`rb-role-${id}`) }}><Plus aria-hidden />Add experience</Button>}
             </>)}
 
             {sec('education', 'Education', <>
@@ -193,13 +242,14 @@ export default function ResumeBuilder() {
                   <Field label="Year" id={`rb-yr-${e.id}`} maxLength={30} value={e.year} onChange={(x) => upList('education', e.id, { year: x.target.value })} />
                 </RowCard>
               ))}
-              {data.education.length < LIMITS.edu && <Button type="button" variant="outline" onClick={() => set((d) => ({ ...d, education: [...d.education, { id: newId(), degree: '', school: '', year: '' }] }))}><Plus aria-hidden />Add education</Button>}
+              {data.education.length < LIMITS.edu && <Button type="button" variant="outline" onClick={() => { const id = newId(); set((d) => ({ ...d, education: [...d.education, { id, degree: '', school: '', year: '' }] })); focusSoon(`rb-deg-${id}`) }}><Plus aria-hidden />Add education</Button>}
             </>)}
 
             {sec('skills', 'Skills', <>
               <label htmlFor="rb-skills" className="text-sm font-medium text-foreground">Skills (comma separated, up to {LIMITS.skills})</label>
-              <Input key={rev} id="rb-skills" defaultValue={data.skills.join(', ')} placeholder="React, SQL, Communication"
+              <Input key={rev} id="rb-skills" maxLength={LIMITS.skills * (LIMITS.skill + 2)} aria-describedby="rb-skills-n" defaultValue={data.skills.join(', ')} placeholder="React, SQL, Communication"
                 onChange={(e) => { const skills = e.target.value.split(',').map((s) => s.trim().slice(0, LIMITS.skill)).filter(Boolean).slice(0, LIMITS.skills); set((d) => ({ ...d, skills })) }} />
+              <p id="rb-skills-n" className="text-xs text-muted-foreground">{data.skills.length}/{LIMITS.skills} skills, up to {LIMITS.skill} characters each. Extra skills are not kept.</p>
               {data.skills.length > 0 && <ul className="flex flex-wrap gap-2" aria-label="Skills list">{data.skills.map((s, i) => <li key={i} className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-semibold text-accent break-all">{s}</li>)}</ul>}
             </>)}
 
@@ -211,11 +261,12 @@ export default function ResumeBuilder() {
                   <Textarea id={`rb-pd-${e.id}`} rows={2} maxLength={LIMITS.detail} value={e.detail} onChange={(x) => upList('projects', e.id, { detail: x.target.value })} />
                 </RowCard>
               ))}
-              {data.projects.length < LIMITS.projects && <Button type="button" variant="outline" onClick={() => set((d) => ({ ...d, projects: [...d.projects, { id: newId(), name: '', detail: '' }] }))}><Plus aria-hidden />Add project</Button>}
+              {data.projects.length < LIMITS.projects && <Button type="button" variant="outline" onClick={() => { const id = newId(); set((d) => ({ ...d, projects: [...d.projects, { id, name: '', detail: '' }] })); focusSoon(`rb-pn-${id}`) }}><Plus aria-hidden />Add project</Button>}
             </>)}
           </div>
           <div className="lg:sticky lg:top-24">{preview}</div>
         </div>
+        )}
       </main>
 
       <Dialog open={confirm} onOpenChange={setConfirm}>

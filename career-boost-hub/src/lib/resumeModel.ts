@@ -26,7 +26,6 @@ const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
 const list = (v: unknown, max: number): unknown[] => (Array.isArray(v) ? v.slice(0, max) : [])
 const strs = (v: unknown, max: number, len: number) => list(v, max).map((s) => str(s, len)).filter(Boolean)
-const id = (v: unknown) => (typeof v === 'string' && v.length > 0 && v.length <= 64 ? v : newId())
 // Rows must be objects; non-object entries are dropped.
 const rows = (v: unknown, max: number) => list(v, max).filter((r) => r && typeof r === 'object' && !Array.isArray(r)).map(rec)
 
@@ -35,6 +34,13 @@ export function normalizeResume(input: unknown): ResumeData {
   const o = rec(input)
   const p = rec(o.personal)
   const S = LIMITS.short
+  const seen = new Set<string>()
+  const id = (v: unknown) => {
+    let i = typeof v === 'string' && v.length > 0 && v.length <= 64 ? v : newId()
+    if (seen.has(i)) i = newId()
+    seen.add(i)
+    return i
+  }
   return {
     template: o.template === 'modern' ? 'modern' : 'classic',
     personal: {
@@ -55,12 +61,13 @@ export function normalizeResume(input: unknown): ResumeData {
 /** https-only link; bare domains get https://. Anything else (javascript:, data:, //host, mailto:, http:) -> null. */
 export function safeUrl(s: string): string | null {
   const t = s.trim()
-  if (!t || t.startsWith('//') || /\s/.test(t)) return null
-  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(t)
+  if (!t || t.length > 2048 || t.startsWith('//') || /\s/.test(t)) return null
+  // `host:8080` is a bare domain with a port, not a scheme
+  const hasScheme = /^[a-z][a-z0-9+.-]*:(?!\d)/i.test(t)
   if (hasScheme && !/^https:\/\//i.test(t)) return null
   try {
     const u = new URL(hasScheme ? t : `https://${t}`)
-    if (u.protocol !== 'https:' || !u.hostname.includes('.')) return null
+    if (u.protocol !== 'https:' || !u.hostname.includes('.') || u.username || u.password) return null
     return u.href
   } catch {
     return null

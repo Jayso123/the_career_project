@@ -10,7 +10,9 @@
   overflow-wrap: anywhere;
 }
 .resume-sheet .rs-entry { break-inside: avoid; }
-.resume-sheet .rs-side { background: hsl(var(--accent)); color: #fff; }
+/* fixed colours (not theme tokens) so the sheet and print look the same in light and dark mode */
+.resume-sheet .rs-side { background: #0f766e; color: #fff; }
+.resume-sheet h2 { break-after: avoid; }
 .resume-sheet a { color: inherit; text-decoration: underline; }
 
 @page { size: A4; margin: 12mm; }
