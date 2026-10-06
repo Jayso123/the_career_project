@@ -1,5 +1,8 @@
 import Navbar from '../components/clone/Navbar'
 import Hero from '../components/clone/Hero'
+import WhyChooseUs from '../components/clone/WhyChooseUs'
+import Services from '../components/clone/Services'
+import CareerPaths from '../components/clone/CareerPaths'
 
 export default function Index() {
   return (
@@ -7,6 +10,9 @@ export default function Index() {
       <Navbar />
       <main>
         <Hero />
+        <WhyChooseUs />
+        <Services />
+        <CareerPaths />
       </main>
     </div>
   )
