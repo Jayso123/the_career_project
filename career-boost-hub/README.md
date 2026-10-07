@@ -61,7 +61,7 @@ Restart `npm run dev` after editing `.env`. Do not commit `.env`.
 ## EmailJS setup
 
 1. Add an email service (e.g. Gmail) and note its Service ID.
-2. Create a template with these variables: `{{to_email}}`, `{{reply_to}}`, `{{subject}}`, `{{message}}`. Set the template's **To email** field to `{{to_email}}`, Reply-To to `{{reply_to}}`, Subject to `{{subject}}`, and put `{{message}}` in the body.
+2. Create a template with these variables: `{{to_email}}`, `{{reply_to}}`, `{{subject}}`, `{{message}}`. Set the template's **To email** field to **your own fixed address** (not `{{to_email}}`: the browser sends that value, so anyone who copies your public keys could otherwise email arbitrary people from your account), Reply-To to `{{reply_to}}`, Subject to `{{subject}}`, and put `{{message}}` in the body.
 3. Put the service ID, template ID and public key in `.env`, and your inbox in `VITE_OWNER_EMAIL`.
 
 An email is sent when a student completes Pay on `/payment` and when the contact form is submitted. Email is best effort: the database row is the source of truth and a failed email never blocks a booking.
@@ -78,7 +78,7 @@ An email is sent when a student completes Pay on `/payment` and when the contact
 ## Known limitations
 
 - Admin lists are not paginated; beyond Supabase's 1000-row response cap, bookings, leads and CSV export would be truncated.
-- The EmailJS public key ships in the browser bundle (that is how EmailJS works); restrict the template/domain in the EmailJS dashboard to limit abuse.
+- The EmailJS public key ships in the browser bundle (that is how EmailJS works); hard-code the To address in the template (above) and turn on EmailJS rate limiting; a domain restriction alone can be forged from a script.
 - Testimonial photos on the home page load from remote Unsplash URLs, as on the original site.
 - `index.html` has no `og:image` / `twitter:image` (the original pointed at lovable.dev). Add your own absolute-URL social image in `index.html`.
 - The leads email check (0003) is `NOT VALID`: they apply to new rows only. Phone is free text (length cap only); the admin UI renders only sanitised tel:/mailto: links and the CSV export guards against formulas.
