@@ -41,7 +41,7 @@ export default function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
       : await signIn(form.email.trim(), form.password)
     setBusy(false)
     if (err) return setError(err)
-    if (isSignup) setNotice('Account created. If email confirmation is enabled, check your inbox, then log in.')
+    if (isSignup) setNotice('Account created. Check your inbox, then log in.')
     else navigate(to, { replace: true, state: redirectState(location.state) })
   }
 
