@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from '../components/ui/use-toast'
 import { supabase } from './supabase'
-import { notifyOwner } from './notify'
+import { notifyOwner, notifyStudent } from './notify'
 import { formatSlot, isUniqueViolation, mockReference } from './booking'
 import type { OnPay, PayContext } from '../pages/Payment'
 
@@ -17,7 +17,7 @@ type Db = Pick<SupabaseClient, 'from'>
 type Who = { id: string; email?: string | null; fullName?: string }
 
 /** Mock booking: session row -> payment row -> link -> owner email. Never throws. */
-export async function runMockBooking(db: Db, ctx: PayContext, who: Who, send = notifyOwner): Promise<Outcome> {
+export async function runMockBooking(db: Db, ctx: PayContext, who: Who, send = notifyOwner, sendStudent = notifyStudent): Promise<Outcome> {
   const { mentor, plan, startsAt, requirements = '', phone = '' } = ctx
   // price comes from a trusted table: router state is user-editable
   const amount = Object.hasOwn(PLAN_PRICES, plan?.name) ? PLAN_PRICES[plan.name] : undefined
@@ -61,6 +61,10 @@ export async function runMockBooking(db: Db, ctx: PayContext, who: Who, send = n
     } catch (e) {
       console.error('owner email failed', e)
     }
+    await sendStudent({
+      email: who.email ?? '', name: who.fullName || '', mentor: mentor.name, plan: plan.name,
+      slot: formatSlot(ctx.date, ctx.time), reference,
+    }).catch((e) => console.error('student email failed', e))
     return { ok: true, paymentId: reference }
   } catch (e) {
     console.error('booking failed', e)

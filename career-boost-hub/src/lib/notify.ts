@@ -26,6 +26,30 @@ export function buildEmailParams(l: Lead, ownerEmail: string): Record<string, st
 const defaultSend = (params: Record<string, string>) =>
   emailjs.send(env.emailjs.serviceId!, env.emailjs.templateId!, params, { publicKey: env.emailjs.publicKey! })
 
+export type Confirmation = { email: string; name: string; mentor: string; plan: string; slot: string; reference: string }
+
+export function buildConfirmationParams(c: Confirmation, ownerEmail = ''): Record<string, string> {
+  return {
+    to_email: c.email, student_name: c.name || 'there', mentor: c.mentor, plan: c.plan,
+    slot: c.slot, reference: c.reference, reply_to: ownerEmail,
+  }
+}
+
+const defaultSendStudent = (params: Record<string, string>) =>
+  emailjs.send(env.emailjs.serviceId!, env.emailjs.studentTemplateId!, params, { publicKey: env.emailjs.publicKey! })
+
+// Booking confirmation to the student. Needs its own EmailJS template (To = {{to_email}}).
+// ponytail: recipient comes from the browser; move to a server function if abuse appears.
+export async function notifyStudent(
+  c: Confirmation,
+  send: (p: Record<string, string>) => Promise<unknown> = defaultSendStudent,
+  templateId: string | undefined = env.emailjs.studentTemplateId,
+): Promise<boolean> {
+  if (!templateId || !c.email) return false
+  try { await send(buildConfirmationParams(c, env.ownerEmail)); return true }
+  catch (e) { console.error('notifyStudent failed', e); return false }
+}
+
 // Never throws: the booking/contact row is the source of truth, email is best effort.
 export async function notifyOwner(
   lead: Lead,

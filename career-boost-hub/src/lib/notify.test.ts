@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { buildEmailParams, notifyOwner, type Lead } from './notify'
+import { buildEmailParams, notifyOwner, notifyStudent, type Lead } from './notify'
 
 const booking: Lead = {
   kind: 'booking', name: 'Asha Rao', email: 'asha@example.com', phone: '+91 98765 43210',
@@ -32,5 +32,21 @@ describe('notify', () => {
   it('returns true when sent', async () => {
     const send = vi.fn().mockResolvedValue(undefined)
     expect(await notifyOwner(booking, send, 'owner@example.com')).toBe(true)
+  })
+})
+
+describe('notifyStudent', () => {
+  const c = { email: 'asha@example.com', name: 'Asha', mentor: 'Priya Sharma', plan: 'Standard', slot: '2 Nov, 10:00', reference: 'MOCK-1' }
+  it('sends the confirmation to the student', async () => {
+    const send = vi.fn().mockResolvedValue(undefined)
+    expect(await notifyStudent(c, send, 'tpl')).toBe(true)
+    expect(send.mock.calls[0][0]).toMatchObject({ to_email: 'asha@example.com', student_name: 'Asha', mentor: 'Priya Sharma', reference: 'MOCK-1' })
+  })
+  it('skips without a template id or email, and never throws', async () => {
+    const send = vi.fn().mockRejectedValue(new Error('x'))
+    expect(await notifyStudent(c, send, '')).toBe(false)
+    expect(await notifyStudent({ ...c, email: '' }, send, 'tpl')).toBe(false)
+    expect(send).not.toHaveBeenCalled()
+    expect(await notifyStudent(c, send, 'tpl')).toBe(false)
   })
 })
